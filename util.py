@@ -68,16 +68,28 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
         tumor_type = int(sample_type[0 : -1])
         normal = 1 if tumor_type > 9 else 0
 
+        stage_save = "not reported"
         if not normal:
             # if cancer, detail stage classification
-            pass
+            for obj in json_obj:
+                if obj["file_id"] != uuid:
+                    continue
+                else:
+
+                    if len(obj["cases"]):
+                        if len(obj["cases"][0]["diagnoses"]):
+                            stage = obj["cases"][0]["diagnoses"][0]["tumor_stage"]
+                            if stage != "not reported":
+                                stage_save = stage.split(" ")[1]
+                    break
         else:
-            uuid_to_stage[uuid] = normal_keyword
-            if normal_keyword not in stage_to_uuids.keys():
-                stage_to_uuids[normal_keyword] = [uuid]
-            else:
-                stage_to_uuids[normal_keyword].append(uuid)
-        print normal
+            stage_save = normal_keyword
+        uuid_to_stage[uuid] = stage_save
+        if stage_save not in stage_to_uuids.keys():
+            stage_to_uuids[stage_save] = [uuid]
+        else:
+            stage_to_uuids[stage_save].append(uuid)
+        print stage_save
     return [uuid_to_stage, stage_to_uuids]
 def gene_and_cancer_stage_profile_of_dna_methy(uuids):
     profile = {}
@@ -106,5 +118,4 @@ def gene_and_cancer_stage_profile_of_dna_methy(uuids):
 if __name__ == '__main__':
     filenames = os.listdir(data_path)
     uuids = get_exist_uuids_from_filenames(filenames)
-    #connect_uuid_to_cancer_stage(uuids, json_file_path)
-    #gene_and_cancer_stage_profile_of_dna_methy(uuids)
+    gene_and_cancer_stage_profile_of_dna_methy(uuids)
