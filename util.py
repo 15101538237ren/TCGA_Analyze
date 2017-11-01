@@ -3,10 +3,21 @@ import os, math, re, json
 import numpy as np
 
 manifest_path = "data/manifest.txt"
-data_path = "data/BRCA"
+tumor_suppressed_gene_file = "data/TSG.txt"
+data_path = "data/BRCA/"
 json_file_path = "data/metadata.json"
-
 normal_keyword = "normal"
+tumor_stages = ["i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","x","not reported"]
+def read_genenames(file_path):
+    genes = []
+    now_file = open(file_path,'r')
+    line = now_file.readline()
+    while line:
+        gene_name = line[0:-1]
+        genes.append(gene_name)
+        line = now_file.readline()
+    now_file.close()
+    return genes
 def connect_filename_to_uuid():
     uuid_to_filename = {}
     filename_to_uuid = {}
@@ -32,9 +43,12 @@ def connect_filename_to_uuid():
     print "connect_filename_to_uuid called"
     return [uuid_to_filename, filename_to_uuid]
 
-def get_exist_uuids_from_filenames(filenames):
-    [_, filename_to_uuid] = connect_filename_to_uuid()
+#global vars
+[uuid_to_filename, filename_to_uuid] = connect_filename_to_uuid()
 
+TSG = read_genenames(tumor_suppressed_gene_file)
+
+def get_exist_uuids_from_filenames(filenames):
     uuids = []
 
     for filename in filenames:
@@ -43,7 +57,6 @@ def get_exist_uuids_from_filenames(filenames):
     print "get_exist_uuids_from_filenames called"
     return uuids
 def connect_uuid_to_cancer_stage(uuids, json_file_path):
-    [uuid_to_filename, _] = connect_filename_to_uuid()
     stage_to_uuids = {}
     uuid_to_stage = {}
 
@@ -65,7 +78,33 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
             else:
                 stage_to_uuids[normal_keyword].append(uuid)
         print normal
+    return [uuid_to_stage, stage_to_uuids]
+def gene_and_cancer_stage_profile_of_dna_methy(uuids):
+    profile = {}
+    for gene in TSG:
+        profile[gene] = {}
+        for tumor_stage in tumor_stages:
+            profile[gene][tumor_stage] = []
+    [uuid_to_stage, stage_to_uuids] = connect_uuid_to_cancer_stage(uuids, json_file_path)
+    for uuid in uuids:
+        file_path = uuid_to_filename[uuid]
+        now_file = open(data_path + file_path,'r')
+        now_file.readline()
+        line = now_file.readline()
+        while line:
+            line_contents = line.split("\t")
+            gene_symbols = line_contents[5].split(";")
+            positions_to_tss = line_contents[8].split(";")
+            beta_val = -1.0 if line_contents[1] == "NA" else float(line_contents[1])
+            for idx, gene_symbol in enumerate(gene_symbols):
+                if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
+                    profile[gene_symbol][uuid_to_stage[uuid]].append(beta_val)
+                    #one gene only add once for each cpg
+                    break
+            line=now_file.readline()
+        now_file.close()
 if __name__ == '__main__':
     filenames = os.listdir(data_path)
     uuids = get_exist_uuids_from_filenames(filenames)
-    connect_uuid_to_cancer_stage(uuids, json_file_path)
+    #connect_uuid_to_cancer_stage(uuids, json_file_path)
+    #gene_and_cancer_stage_profile_of_dna_methy(uuids)
