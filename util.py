@@ -1,6 +1,8 @@
 # -*- coding:utf-8 -*-
-import os, math, re, json
+import os, math, re, json, time
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
 
 manifest_path = "data/manifest.txt"
 tumor_suppressed_gene_file = "data/TSG.txt"
@@ -8,6 +10,8 @@ data_path = "data/BRCA/"
 json_file_path = "data/metadata.json"
 normal_keyword = "normal"
 tumor_stages = ["i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","x","not reported"]
+tumor_stages_xaxis = {"i":1,"ia":2 ,"ib":3,"ii":4,"iia":5,"iib":6,"iic":7,"iii":8,"iiia":9,"iiib":10,"iiic":11,"iv":12,"x":13,"not reported":-1}
+
 def read_genenames(file_path):
     genes = []
     now_file = open(file_path,'r')
@@ -91,14 +95,26 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
             stage_to_uuids[stage_save].append(uuid)
         print stage_save
     return [uuid_to_stage, stage_to_uuids]
+def plot_for_each_gene(gene_name,x, y, c, xrange, xticks):
+    fig, ax = plt.subplots()
+    ax.xticks(xrange, xticks)
+    ax.scatter(x, y, color=c)
+    ax.set_title(gene_name + " methylation for different cancer stage")
+    plt.savefig(gene_name.lower() + '.png')
 def gene_and_cancer_stage_profile_of_dna_methy(uuids):
     profile = {}
+    x_profile = {}
+    y_profile = {}
     for gene in TSG:
         profile[gene] = {}
+        x_profile[gene] = []
+        y_profile[gene] = []
         for tumor_stage in tumor_stages:
             profile[gene][tumor_stage] = []
     [uuid_to_stage, stage_to_uuids] = connect_uuid_to_cancer_stage(uuids, json_file_path)
-    for uuid in uuids:
+    tot_timelapse = 0.0
+    for uidx, uuid in enumerate(uuids):
+        t0 = time.time()
         file_path = uuid_to_filename[uuid]
         now_file = open(data_path + file_path,'r')
         now_file.readline()
@@ -111,10 +127,23 @@ def gene_and_cancer_stage_profile_of_dna_methy(uuids):
             for idx, gene_symbol in enumerate(gene_symbols):
                 if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
                     profile[gene_symbol][uuid_to_stage[uuid]].append(beta_val)
+                    x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]])
+                    y_profile[gene_symbol].append(beta_val)
                     #one gene only add once for each cpg
                     break
             line=now_file.readline()
         now_file.close()
+        t1 = time.time()
+        ratio = float(uidx + 1.0) / float(len(uuids))
+        percentage = ratio * 100.0
+        time_this_turn = t1 - t0
+        tot_timelapse = tot_timelapse + time_this_turn
+        remain_time = (tot_timelapse / ratio) * (1.0 - ratio)
+        print "%d/%d, %.2f %%, Total Time: %.2f, Time Left: %.2f" %(uidx + 1.0, len(uuids), percentage, tot_timelapse, remain_time)
+    for gene in TSG:
+        xs = range(1,14)
+        xs.append(-1)
+        plot_for_each_gene(gene, x_profile[gene], y_profile[gene],"blue",xs,tumor_stages)
 if __name__ == '__main__':
     filenames = os.listdir(data_path)
     uuids = get_exist_uuids_from_filenames(filenames)
