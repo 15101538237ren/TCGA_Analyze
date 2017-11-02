@@ -18,6 +18,7 @@ pickle_filepath = "data/data.pkl"
 for idx, item in enumerate(tumor_stages):
     tumor_stages_xaxis[item] = idx + 1
 
+#checked
 def read_genenames(file_path):
     genes = []
     now_file = open(file_path,'r')
@@ -28,6 +29,8 @@ def read_genenames(file_path):
         line = now_file.readline()
     now_file.close()
     return genes
+
+#checked
 def connect_filename_to_uuid():
     uuid_to_filename = {}
     filename_to_uuid = {}
@@ -58,6 +61,7 @@ def connect_filename_to_uuid():
 
 TSG = read_genenames(tumor_suppressed_gene_file)
 
+#checked
 def get_exist_uuids_from_filenames(filenames):
     uuids = []
 
@@ -66,6 +70,7 @@ def get_exist_uuids_from_filenames(filenames):
 
     print "get_exist_uuids_from_filenames called"
     return uuids
+#checked
 def connect_uuid_to_cancer_stage(uuids, json_file_path):
     stage_to_uuids = {}
     uuid_to_stage = {}
@@ -101,6 +106,7 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
             stage_to_uuids[stage_save].append(uuid)
         # print stage_save
     return [uuid_to_stage, stage_to_uuids]
+#checked
 def plot_for_each_gene(gene_name,x, y, box_data, y_means, c, xrange, xticks):
     plt.clf()
     plt.cla()
@@ -115,6 +121,8 @@ def plot_for_each_gene(gene_name,x, y, box_data, y_means, c, xrange, xticks):
     ax.set_ylim([0, 1.0])
     ax.set_title(gene_name + " methylation for different cancer stage")
     plt.savefig(figure_path + gene_name.lower() + '.png')
+
+#checked
 def gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False):
     if not load:
         profile = {}
@@ -176,4 +184,4 @@ def gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False):
 if __name__ == '__main__':
     filenames = os.listdir(data_path)
     uuids = get_exist_uuids_from_filenames(filenames)
-    gene_and_cancer_stage_profile_of_dna_methy(uuids, load=True)
+    gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False)
