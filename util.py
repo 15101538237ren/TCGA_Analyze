@@ -6,14 +6,12 @@ import matplotlib.pyplot as plt
 
 manifest_path = "data/manifest.txt"
 tumor_suppressed_gene_file = "data/TSG.txt"
-figure_path = "figure/"
-data_path = "data/BRCA/"
+figure_path = "figure"
 json_file_path = "data/metadata.json"
 normal_keyword = "normal"
-#tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","x","not reported"]
-tumor_stages = ["normal","i","ia","iia","iib","iiia","iiib","iiic","x","not reported"]
+tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","x","not reported"]
+#tumor_stages = ["normal","i","ia","iia","iib","iiia","iiib","iiic","x","not reported"]
 tumor_stages_xaxis = {}
-pickle_filepath = "data/data.pkl"
 
 for idx, item in enumerate(tumor_stages):
     tumor_stages_xaxis[item] = idx + 1
@@ -107,7 +105,7 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
         # print stage_save
     return [uuid_to_stage, stage_to_uuids]
 #checked
-def plot_for_each_gene(gene_name,x, y, box_data, y_means, c, xrange, xticks):
+def plot_for_each_gene(cancer_name, gene_name,x, y, box_data, y_means, c, xrange, xticks):
     plt.clf()
     plt.cla()
     fig, ax = plt.subplots()
@@ -120,10 +118,13 @@ def plot_for_each_gene(gene_name,x, y, box_data, y_means, c, xrange, xticks):
     ax.set_xlim([0, len(tumor_stages) - 0.5])
     ax.set_ylim([0, 1.0])
     ax.set_title(gene_name + " methylation for different cancer stage")
-    plt.savefig(figure_path + gene_name.lower() + '.png')
+    figure_dir = figure_path+ os.sep + cancer_name
+    if not os.path.exists(figure_dir):
+        os.makedirs(figure_dir)
+    plt.savefig(figure_dir +os.sep + gene_name.lower() + '.png')
 
 #checked
-def gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False):
+def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_filepath,uuids, load=False):
     if not load:
         profile = {}
         x_profile = {}
@@ -144,16 +145,21 @@ def gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False):
             line = now_file.readline()
             while line:
                 line_contents = line.split("\t")
-                gene_symbols = line_contents[5].split(";")
-                positions_to_tss = line_contents[8].split(";")
-                beta_val = -1.0 if line_contents[1] == "NA" else float(line_contents[1])
-                for idx, gene_symbol in enumerate(gene_symbols):
-                    if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
-                        profile[gene_symbol][tumor_stages_xaxis[uuid_to_stage[uuid]] - 1].append(beta_val)
-                        x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]])
-                        y_profile[gene_symbol].append(beta_val)
-                        #one gene only add once for each cpg
-                        break
+                try:
+                    gene_symbols = line_contents[5].split(";")
+                    positions_to_tss = line_contents[8].split(";")
+                    beta_val = -1.0 if line_contents[1] == "NA" else float(line_contents[1])
+                    for idx, gene_symbol in enumerate(gene_symbols):
+                        if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
+                            profile[gene_symbol][tumor_stages_xaxis[uuid_to_stage[uuid]] - 1].append(beta_val)
+                            x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]])
+                            y_profile[gene_symbol].append(beta_val)
+                            #one gene only add once for each cpg
+                            break
+                except IndexError, e:
+                    print "line_contents :",
+                    print line_contents
+
                 line=now_file.readline()
             now_file.close()
             t1 = time.time()
@@ -176,12 +182,18 @@ def gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False):
         y_profile = pickle.load(pickle_file)
         pickle_file.close()
         print "load pickle file %s finished" % (pickle_filepath)
-    for gene in TSG:
-        xs = range(1,len(tumor_stages)+1)
-        y_means = [np.array(arr).mean() for arr in profile[gene]]
-        y_means = y_means[0:-1]
-        plot_for_each_gene(gene, x_profile[gene], y_profile[gene], profile[gene], y_means,"blue",xs,tumor_stages)
+    # for gene in TSG:
+    #     xs = range(1,len(tumor_stages)+1)
+    #     y_means = [np.array(arr).mean() for arr in profile[gene]]
+    #     y_means = y_means[0:-1]
+    #     plot_for_each_gene(cancer_name, gene, x_profile[gene], y_profile[gene], profile[gene], y_means,"blue",xs,tumor_stages)
 if __name__ == '__main__':
-    filenames = os.listdir(data_path)
-    uuids = get_exist_uuids_from_filenames(filenames)
-    gene_and_cancer_stage_profile_of_dna_methy(uuids, load=False)
+    base_dir = "data"
+    cancer_names = ["BRCA","COAD","LIHC","LUAD","LUSC"]
+    for cancer_name in cancer_names:
+        print "now analysing %s" % cancer_name
+        data_path = base_dir + os.sep+ cancer_name + os.sep
+        pickle_filepath = base_dir + os.sep + cancer_name + ".pkl"
+        filenames = os.listdir(data_path)
+        uuids = get_exist_uuids_from_filenames(filenames)
+        gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=False)
