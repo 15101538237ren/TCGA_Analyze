@@ -1,7 +1,8 @@
 # -*- coding:utf-8 -*-
-import os, math, re, json, time, pickle
+import os, math, re, json, time, pickle, random
 import numpy as np
 import matplotlib
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 manifest_path = "data/manifest.txt"
@@ -89,11 +90,13 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
                     continue
                 else:
 
-                    if len(obj["cases"]):
-                        if len(obj["cases"][0]["diagnoses"]):
-                            stage = obj["cases"][0]["diagnoses"][0]["tumor_stage"]
-                            if stage != "not reported":
-                                stage_save = stage.split(" ")[1]
+                    if "cases" in obj.keys():
+                        if len(obj["cases"]):
+                            if "diagnoses" in obj["cases"][0].keys():
+                                if len(obj["cases"][0]["diagnoses"]):
+                                    stage = obj["cases"][0]["diagnoses"][0]["tumor_stage"]
+                                    if stage != "not reported":
+                                        stage_save = stage.split(" ")[1]
                     break
         else:
             stage_save = normal_keyword
@@ -110,11 +113,16 @@ def plot_for_each_gene(cancer_name, gene_name,x, y, box_data, y_means, c, xrange
     plt.cla()
     fig, ax = plt.subplots()
     plt.xticks(xrange, xticks)
-    ax.scatter(x, y, color=c, s=2.0)
+
+    xx = []
+    for item in x:
+        ro = random.random()*0.6 - 0.3
+        xx.append(item + ro)
+    ax.scatter(xx, y, color=c, s=2.0)
     ax.boxplot(box_data,sym='')
-    for xidx, y_mean in enumerate(y_means):
-        if y_mean:
-            ax.text(xidx + 0.8, y_mean, str(round(y_mean,2)),color='red',fontsize=12)
+    # for xidx, y_mean in enumerate(y_means):
+    #     if y_mean:
+    #         ax.text(xidx + 0.8, y_mean, str(round(y_mean,2)),color='red',fontsize=12)
     ax.set_xlim([0, len(tumor_stages) - 0.5])
     ax.set_ylim([0, 1.0])
     ax.set_title(gene_name + " methylation for different cancer stage")
@@ -152,7 +160,8 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
                     for idx, gene_symbol in enumerate(gene_symbols):
                         if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
                             profile[gene_symbol][tumor_stages_xaxis[uuid_to_stage[uuid]] - 1].append(beta_val)
-                            x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]])
+                            ro = random.random()*0.6 - 0.3
+                            x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]] + ro)
                             y_profile[gene_symbol].append(beta_val)
                             #one gene only add once for each cpg
                             break
@@ -189,7 +198,7 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
     #     plot_for_each_gene(cancer_name, gene, x_profile[gene], y_profile[gene], profile[gene], y_means,"blue",xs,tumor_stages)
 if __name__ == '__main__':
     base_dir = "data"
-    cancer_names = ["BRCA","COAD","LIHC","LUAD","LUSC"]
+    cancer_names = ["COAD","LIHC","LUAD","LUSC"]#,,"BRCA"
     for cancer_name in cancer_names:
         print "now analysing %s" % cancer_name
         data_path = base_dir + os.sep+ cancer_name + os.sep
