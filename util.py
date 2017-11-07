@@ -1,21 +1,34 @@
 # -*- coding:utf-8 -*-
 import os, math, re, json, time, pickle, random
 import numpy as np
-import matplotlib
-#matplotlib.use('Agg')
+import seaborn as sns
 import matplotlib.pyplot as plt
 
-manifest_path = "data/manifest.txt"
-tumor_suppressed_gene_file = "data/TSG.txt"
-figure_path = "figure"
-json_file_path = "data/metadata.json"
-normal_keyword = "normal"
-tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","x","not reported"]
-#tumor_stages = ["normal","i","ia","iia","iib","iiia","iiib","iiic","x","not reported"]
-tumor_stages_xaxis = {}
+#preparation files
+data_dir = "data"
+fig_dir = "figure"
+methy_data_dir = "methy_data"
+mean_and_var_fig_dir = "mean_and_std_figure"
 
+manifest_path = data_dir + os.sep + "manifest.txt"
+json_file_path = data_dir + os.sep + "metadata.json"
+tumor_suppressed_gene_file = data_dir + os.sep + "TSG.txt"
+
+cancer_names = ["BRCA","COAD","LIHC","LUAD","LUSC"] #
+cancer_markers = {"BRCA":'rs', "COAD":'gp', "LIHC":'bo',"LUAD":'kx',"LUSC":'c*'}
+
+tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
+tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","x":"x","not reported":"not reported"}
+merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
+normal_keyword = "normal"
+
+tumor_stages_xaxis = {}
 for idx, item in enumerate(tumor_stages):
     tumor_stages_xaxis[item] = idx + 1
+
+tumor_stages_xaxis2 = {}
+for idx, item in enumerate(merged_stage):
+    tumor_stages_xaxis2[item] = idx + 1
 
 #checked
 def read_genenames(file_path):
@@ -57,7 +70,6 @@ def connect_filename_to_uuid():
 
 #global vars
 [uuid_to_filename, filename_to_uuid] = connect_filename_to_uuid()
-
 TSG = read_genenames(tumor_suppressed_gene_file)
 
 #checked
@@ -107,42 +119,46 @@ def connect_uuid_to_cancer_stage(uuids, json_file_path):
             stage_to_uuids[stage_save].append(uuid)
         # print stage_save
     return [uuid_to_stage, stage_to_uuids]
+
 #checked
-def plot_for_each_gene(cancer_name, gene_name,x, y, box_data, y_means, c, xrange, xticks):
+def plot_for_each_gene(cancer_name, gene_name,x, y, box_data, c, xrange, xticks):
     plt.clf()
     plt.cla()
     fig, ax = plt.subplots()
     plt.xticks(xrange, xticks)
 
-    xx = []
-    for item in x:
-        ro = random.random()*0.6 - 0.3
-        xx.append(item + ro)
-    ax.scatter(xx, y, color=c, s=2.0)
+    ax.scatter(x, y, color=c, s=2.0)
     ax.boxplot(box_data,sym='')
-    # for xidx, y_mean in enumerate(y_means):
-    #     if y_mean:
-    #         ax.text(xidx + 0.8, y_mean, str(round(y_mean,2)),color='red',fontsize=12)
-    ax.set_xlim([0, len(tumor_stages) - 0.5])
+    ax.set_xlim([0, len(merged_stage) - 0.5])
     ax.set_ylim([0, 1.0])
     ax.set_title(gene_name + " methylation for different cancer stage")
-    figure_dir = figure_path+ os.sep + cancer_name
+
+    figure_dir = fig_dir + os.sep + cancer_name
     if not os.path.exists(figure_dir):
         os.makedirs(figure_dir)
     plt.savefig(figure_dir +os.sep + gene_name.lower() + '.png')
 
+#put array data to .csv file, one value per line
+def save_data_to_file(arr, path, precision = 4):
+    file_out = open(path, "w")
+    for item in arr:
+        file_out.write(str(round(item, precision)) + "\n")
+    file_out.close()
+
 #checked
 def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_filepath,uuids, load=False):
+
     if not load:
         profile = {}
         x_profile = {}
         y_profile = {}
         for gene in TSG:
             profile[gene] = []
-            x_profile[gene] = []
-            y_profile[gene] = []
+            x_profile[gene] = [] #profile 中 stage 编号的list
+            y_profile[gene] = [] #profile 中 DNA methylation level的list
             for tumor_stage in tumor_stages:
                 profile[gene].append([])
+
         [uuid_to_stage, stage_to_uuids] = connect_uuid_to_cancer_stage(uuids, json_file_path)
         tot_timelapse = 0.0
         for uidx, uuid in enumerate(uuids):
@@ -151,6 +167,9 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
             now_file = open(data_path + file_path,'r')
             now_file.readline()
             line = now_file.readline()
+            temp_gene_methy_dict = {}
+            for gene_symbol in TSG:
+                temp_gene_methy_dict[gene_symbol] = []
             while line:
                 line_contents = line.split("\t")
                 try:
@@ -159,10 +178,7 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
                     beta_val = -1.0 if line_contents[1] == "NA" else float(line_contents[1])
                     for idx, gene_symbol in enumerate(gene_symbols):
                         if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
-                            profile[gene_symbol][tumor_stages_xaxis[uuid_to_stage[uuid]] - 1].append(beta_val)
-                            ro = random.random()*0.6 - 0.3
-                            x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]] + ro)
-                            y_profile[gene_symbol].append(beta_val)
+                            temp_gene_methy_dict[gene_symbol].append(beta_val)
                             #one gene only add once for each cpg
                             break
                 except IndexError, e:
@@ -171,6 +187,14 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
 
                 line=now_file.readline()
             now_file.close()
+
+            ro = random.random()*0.3 - 0.15
+            for gene_symbol in TSG:
+                mean_methy_level_of_this_case = float(np.array(temp_gene_methy_dict[gene_symbol]).mean())
+                profile[gene_symbol][tumor_stages_xaxis[uuid_to_stage[uuid]] - 1].append(mean_methy_level_of_this_case)
+                x_profile[gene_symbol].append(tumor_stages_xaxis[uuid_to_stage[uuid]] + ro)
+                y_profile[gene_symbol].append(mean_methy_level_of_this_case)
+
             t1 = time.time()
             ratio = float(uidx + 1.0) / float(len(uuids))
             percentage = ratio * 100.0
@@ -178,6 +202,7 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
             tot_timelapse = tot_timelapse + time_this_turn
             remain_time = (tot_timelapse / ratio) * (1.0 - ratio)
             print "%d/%d, %.2f %%, Total Time: %.2fs, Time Left: %.2fs" %(uidx + 1.0, len(uuids), percentage, tot_timelapse, remain_time)
+
         pickle_file = open(pickle_filepath, 'wb')
         pickle.dump(profile,pickle_file,-1)
         pickle.dump(x_profile,pickle_file,-1)
@@ -185,24 +210,147 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
         pickle_file.close()
     else:
         pickle_file = open(pickle_filepath,"rb")
-        print "start load pickle file %s" % (pickle_filepath)
         profile = pickle.load(pickle_file)
         x_profile = pickle.load(pickle_file)
         y_profile = pickle.load(pickle_file)
         pickle_file.close()
         print "load pickle file %s finished" % (pickle_filepath)
-    # for gene in TSG:
-    #     xs = range(1,len(tumor_stages)+1)
-    #     y_means = [np.array(arr).mean() for arr in profile[gene]]
-    #     y_means = y_means[0:-1]
-    #     plot_for_each_gene(cancer_name, gene, x_profile[gene], y_profile[gene], profile[gene], y_means,"blue",xs,tumor_stages)
+    return [profile, x_profile, y_profile]
+
+def save_all_cancer_methy_data(cancer_name, profile_arr):
+    y_profile = profile_arr[2]
+    methy_cancer_dir = methy_data_dir + os.sep + cancer_name + os.sep
+    if not os.path.exists(methy_cancer_dir):
+        os.makedirs(methy_cancer_dir)
+    all_methy_data = []
+    for gene in TSG:
+        all_methy_data.extend(y_profile[gene])
+    save_data_to_file(all_methy_data, methy_cancer_dir + cancer_name + ".dat")
+    print "save %s all methy data successful" % cancer_name
+
+def save_methy_data(cancer_name, profile_arr):
+    profile = profile_arr[0]
+    methy_cancer_dir = methy_data_dir + os.sep + cancer_name + os.sep
+    if not os.path.exists(methy_cancer_dir):
+        os.makedirs(methy_cancer_dir)
+    methy_of_stage_arr = [[] for item in merged_stage]
+    for gene in TSG:
+        for idx_of_stage, stage_name in enumerate(merged_stage):
+            methy_of_this_gene = profile[gene][idx_of_stage]
+            if len(methy_of_this_gene):
+                for methy_val in methy_of_this_gene:
+                    methy_of_stage_arr[idx_of_stage].append(methy_val)
+
+    for stage_idx, stage_name in enumerate(merged_stage):
+        if len(methy_of_stage_arr[stage_idx]):
+            save_data_to_file(methy_of_stage_arr[stage_idx], methy_cancer_dir + stage_name + ".dat")
+    print "save %s methy stage data successful" % cancer_name
+
+
+#将原来小类stage数据合并到大类stage
+def convert_origin_to_new_profile(origin_list_of_a_gene):
+    new_list = [[] for item in merged_stage]
+    for idx, item1 in enumerate(tumor_stages):
+        for item2 in origin_list_of_a_gene[idx]:
+            new_list[tumor_stages_xaxis2[tumor_stage_convert[item1]] - 1].append(item2)
+    return new_list
+
+def convert_origin_profile_into_merged_profile(origin_profile_list):
+    origin_profile = origin_profile_list[0]
+    new_profile = {gene:[] for gene in TSG}
+
+    for gene in TSG:
+        for stage in merged_stage:
+            new_profile[gene].append([])
+        for idx, item1 in enumerate(tumor_stages):
+            for item2 in origin_profile[gene][idx]:
+                new_profile[gene][tumor_stages_xaxis2[tumor_stage_convert[item1]] - 1].append(item2)
+    return [new_profile]
+def merged_stage_scatter_and_box_plot(profile_arr):
+    profile = profile_arr[0]
+    new_profile = {}
+
+    for gene_idx, gene in enumerate(TSG):
+        xs = range(1,len(merged_stage)+1)
+        new_profile[gene] = convert_origin_to_new_profile(profile[gene])
+
+        new_x_profile = []
+        new_y_profile = []
+        for idx, arr in enumerate(new_profile[gene]):
+            for item1 in arr:
+                ro = random.random() * 0.4 - 0.2
+                new_x_profile.append(idx + 1 + ro)
+                new_y_profile.append(item1)
+            plot_for_each_gene(cancer_name, gene, new_x_profile, new_y_profile, new_profile[gene], "blue", xs, merged_stage)
+
+def init_mean_and_var_dict():
+    means_dict = {}
+    variance_dict = {}
+    for gene in TSG:
+        means_dict[gene] = {}
+        variance_dict[gene] = {}
+        for cancer_name in cancer_names:
+            means_dict[gene][cancer_name] = []
+            variance_dict[gene][cancer_name]=[]
+    return [means_dict, variance_dict]
+
+#initialize global vars
+[mean_dict, var_dict] = init_mean_and_var_dict()
+
+
+def plot_mean_and_var(all_cancer_profiles):
+    mean_path = mean_and_var_fig_dir + os.sep + "mean" + os.sep
+    var_path = mean_and_var_fig_dir + os.sep + "std" + os.sep
+    paths = [mean_path, var_path]
+    for item in paths:
+        if not os.path.exists(item):
+            os.makedirs(item)
+
+    for idx, cancer_name in enumerate(cancer_names):
+        profile = all_cancer_profiles[idx]
+        for gene in TSG:
+            for idx_of_stage, stage_name in enumerate(merged_stage):
+                methy_of_this_gene = profile[gene][idx_of_stage]
+                print "cancer %s gene %s stage %s len %d" % (cancer_name, gene, stage_name, len(methy_of_this_gene))
+                if len(methy_of_this_gene):
+                    mean_dict[gene][cancer_name].append(np.array(methy_of_this_gene).mean())
+                    var_dict[gene][cancer_name].append(np.array(methy_of_this_gene).std())
+                else:
+                    mean_dict[gene][cancer_name].append(0.0)
+                    var_dict[gene][cancer_name].append(0.0)
+    dicts = [mean_dict, var_dict]
+    dict_names = ["mean", "var"]
+    for idx, dict in enumerate(dicts):
+        for gene in TSG:
+            dict_gene_i = dicts[idx][gene]
+            plt.clf()
+            plt.cla()
+            fig, ax = plt.subplots()
+            plt.xticks(range(1, len(merged_stage) - 1), merged_stage[0:-2])
+
+            ax.set_title(dict_names[idx] + " methy-level of " + gene)
+            ax.set_xlim([0, len(merged_stage) - 1.5])
+            if idx == 1:
+                ax.set_ylim([0, 0.2])
+            else:
+                ax.set_ylim([0, 1.0])
+            plots = []
+            for cancer_name in cancer_names:
+                vals = dict_gene_i[cancer_name]
+                x = range(1, len(vals) - 1)
+                plot, = plt.plot(x, vals[0:-2], cancer_markers[cancer_name], ls="-")
+                plots.append(plot)
+            ax.legend(plots, cancer_names, loc='best')
+            plt.savefig(paths[idx] + gene.lower() + '.png')
 if __name__ == '__main__':
-    base_dir = "data"
-    cancer_names = ["COAD","LIHC","LUAD","LUSC"]#,,"BRCA"
+    all_cancer_profiles = []
     for cancer_name in cancer_names:
         print "now analysing %s" % cancer_name
-        data_path = base_dir + os.sep+ cancer_name + os.sep
-        pickle_filepath = base_dir + os.sep + cancer_name + ".pkl"
+        data_path = data_dir + os.sep+ cancer_name + os.sep
+        pickle_filepath = data_dir + os.sep + cancer_name + ".pkl"
         filenames = os.listdir(data_path)
         uuids = get_exist_uuids_from_filenames(filenames)
-        gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=False)
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=True)
+        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+        all_cancer_profiles.append(new_profile_list[0])
+    plot_mean_and_var(all_cancer_profiles)
