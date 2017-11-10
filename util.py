@@ -12,7 +12,7 @@ mean_and_var_fig_dir = "mean_and_std_figure"
 
 manifest_path = data_dir + os.sep + "manifest.txt"
 json_file_path = data_dir + os.sep + "metadata.json"
-tumor_suppressed_gene_file = data_dir + os.sep + "TSG.txt"
+tumor_suppressed_gene_file = data_dir + os.sep + "gene_with_protein_product.tsv"
 
 cancer_names = ["BRCA","COAD","LIHC","LUAD","LUSC"] #
 cancer_markers = {"BRCA":'rs', "COAD":'gp', "LIHC":'bo',"LUAD":'kx',"LUSC":'c*'}
@@ -40,7 +40,28 @@ def read_genenames(file_path):
         genes.append(gene_name)
         line = now_file.readline()
     now_file.close()
-    return genes
+    return [genes, []]
+
+def read_whole_genenames(file_path):
+    genes = []
+    alias_dict = {}
+    now_file = open(file_path,'r')
+    lines = now_file.readline().split("\r")
+    for line in lines:
+        contents = line.split("\t")
+        gene_name = contents[0]
+        alias_dict[gene_name] = gene_name
+        alias = contents[1].split("|")
+        previous_symbols = contents[2].split("|")
+        if len(alias) and alias[0] != "":
+            for alias_name in alias:
+                alias_dict[alias_name] = gene_name
+        if len(previous_symbols) and previous_symbols[0]!="":
+            for previous_symbol in previous_symbols:
+                alias_dict[previous_symbol] = gene_name
+        genes.append(gene_name)
+    now_file.close()
+    return [genes, alias_dict]
 
 #checked
 def connect_filename_to_uuid():
@@ -70,8 +91,8 @@ def connect_filename_to_uuid():
 
 #global vars
 [uuid_to_filename, filename_to_uuid] = connect_filename_to_uuid()
-TSG = read_genenames(tumor_suppressed_gene_file)
-
+[TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_file)
+print "gene number %d" % len(TSG)
 #checked
 def get_exist_uuids_from_filenames(filenames):
     uuids = []
@@ -146,7 +167,7 @@ def save_data_to_file(arr, path, precision = 4):
     file_out.close()
 
 #checked
-def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_filepath,uuids, load=False):
+def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_filepath,uuids, load=False, whole_genes= True):
 
     if not load:
         profile = {}
@@ -176,18 +197,28 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
                     gene_symbols = line_contents[5].split(";")
                     positions_to_tss = line_contents[8].split(";")
                     beta_val = -1.0 if line_contents[1] == "NA" else float(line_contents[1])
+                    gene_types = line_contents[6].split(";")
                     for idx, gene_symbol in enumerate(gene_symbols):
-                        if (gene_symbol in TSG) and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
-                            temp_gene_methy_dict[gene_symbol].append(beta_val)
-                            #one gene only add once for each cpg
-                            break
+                        if gene_symbol != "." and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
+                            if not whole_genes:
+                                if (gene_symbol in TSG):
+                                    temp_gene_methy_dict[gene_symbol].append(beta_val)
+                                    #one gene only add once for each cpg
+                                    break
+                            else:
+                                if (gene_types[idx]=="protein_coding"):
+                                    try:
+                                        temp_gene_methy_dict[alias_dict[gene_symbol]].append(beta_val)
+                                    except KeyError, e1:
+                                        pass
+                                        # print "KeyError : %s" % str(e1)
+                                    #one gene only add once for each cpg
+                                    break
                 except IndexError, e:
                     print "line_contents :",
                     print line_contents
-
                 line=now_file.readline()
             now_file.close()
-
             ro = random.random()*0.3 - 0.15
             for gene_symbol in TSG:
                 mean_methy_level_of_this_case = float(np.array(temp_gene_methy_dict[gene_symbol]).mean())
@@ -329,7 +360,9 @@ def save_gene_methy_data(cancer_name, profile_list):
         gene_data = profile_list[0][gene]
         merged_data = []
         out_xy_path = methy_data_dir + os.sep + gene + "_xy_" + cancer_name + ".dat"
+        out_y_label_path = methy_data_dir + os.sep + gene + "_y_label_" + cancer_name + ".dat"
         out_xy_file = open(out_xy_path, "w")
+        out_y_label_file = open(out_y_label_path, "w")
         for idx, stage in enumerate(merged_stage):
             if stage != "not reported":
                 methy_cases_vals = gene_data[idx]
@@ -338,10 +371,14 @@ def save_gene_methy_data(cancer_name, profile_list):
                     x = idx + 1 + ro
                     ltw = str(round(float(x), 4)) + "," + str(round(float(item_y), 6)) + "\n"
                     out_xy_file.write(ltw)
+                    tmp_stage = "n" if stage == "normal" else stage
+                    ltw2 = str(round(float(item_y), 6)) + "," + tmp_stage.ljust(4) + "\n"
+                    out_y_label_file.write(ltw2)
                 stage_data = gene_data[idx]
                 merged_data.extend(stage_data)
                 save_data_to_file(stage_data, methy_data_dir + os.sep + gene + "_" + merged_stage[idx] + "_" + cancer_name + ".dat")
         out_xy_file.close()
+        out_y_label_file.close()
         save_data_to_file(merged_data,  methy_data_dir + os.sep + gene + "_" + "all_stage" + "_" + cancer_name + ".dat")
     print "save methy data successfully!"
 if __name__ == '__main__':
@@ -352,8 +389,8 @@ if __name__ == '__main__':
         pickle_filepath = data_dir + os.sep + cancer_name + ".pkl"
         filenames = os.listdir(data_path)
         uuids = get_exist_uuids_from_filenames(filenames)
-        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=True)
-        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
-        save_gene_methy_data(cancer_name, new_profile_list)
-        all_cancer_profiles.append(new_profile_list[0])
-    plot_mean_and_var(all_cancer_profiles)
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=False, whole_genes= True)
+        # new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+        # save_gene_methy_data(cancer_name, new_profile_list)
+        #all_cancer_profiles.append(new_profile_list[0])
+    #plot_mean_and_var(all_cancer_profiles)
