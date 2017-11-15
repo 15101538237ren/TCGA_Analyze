@@ -21,7 +21,6 @@ cancer_markers = {"BRCA":'rs', "COAD":'gp', "LIHC":'bo',"LUAD":'kx',"LUSC":'c*'}
 tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
-reduced_stage = ["normal","i","ii","iii","iv"]
 normal_keyword = "normal"
 
 tumor_stages_xaxis = {}
@@ -372,19 +371,20 @@ def plot_mean_and_var(all_cancer_profiles):
                 plots.append(plot)
             ax.legend(plots, cancer_names, loc='best')
             plt.savefig(paths[idx] + gene.lower() + '.png')
-def save_cancer_std_and_mean_of_all_genes(cancer_name, cancer_profile_arr, out_dir="."):
+def save_cancer_std_and_mean_of_all_genes(cancer_name, cancer_profile_arr, stage_names, out_dir="."):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     cancer_profile = cancer_profile_arr[0]
     for gene in TSG:
-        for idx_of_stage, stage_name in enumerate(reduced_stage):
+        for idx_of_stage, stage_name in enumerate(stage_names):
             methy_of_this_gene = cancer_profile[gene][idx_of_stage]
             mean_dict[gene][cancer_name].append(np.array(methy_of_this_gene).mean())
             var_dict[gene][cancer_name].append(np.array(methy_of_this_gene).std())
     dict_names = ["mean", "std"]
     dicts = [mean_dict, var_dict]
     header = ["gene"]
-    for stage_name in reduced_stage:
+
+    for stage_name in stage_names:
         header.append(stage_name)
     for idx, dict_val in enumerate(dicts):
         out_data_path = out_dir + os.sep + cancer_name + "_" + dict_names[idx] + ".dat"
@@ -434,7 +434,7 @@ def save_gene_methy_data(cancer_name, profile_list):
     print "save methy data successfully!"
 
 def get_stage_idx_from_stage_name(stage_name):
-    for idx, stage in enumerate(reduced_stage):
+    for idx, stage in enumerate(merged_stage):
         if stage == stage_name:
             return idx
     return -1
@@ -505,8 +505,8 @@ if __name__ == '__main__':
         filenames = os.listdir(data_path)
         uuids = get_exist_uuids_from_filenames(filenames)
         temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=True, whole_genes= True)
-        save_cancer_std_and_mean_of_all_genes(cancer_name, temp_profile_list, out_dir="mean_std_data")
-        cmp_gene_variations_in_mean_and_std(cancer_names, stat_names, stat_epsilons, normal_keyword, "i", input_dir ="mean_std_data", out_dir=".")
+        save_cancer_std_and_mean_of_all_genes(cancer_name, temp_profile_list, [normal_keyword, "i"],out_dir="mean_std_data")
+    cmp_gene_variations_in_mean_and_std(cancer_names, stat_names, stat_epsilons, normal_keyword, "i", input_dir ="mean_std_data", out_dir=".")
         # merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
         # new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
         # save_gene_methy_data(cancer_name, new_profile_list)
