@@ -1,0 +1,17 @@
+data
+figure
+mean_and_std_figure
+mat_plot
+methy_data
+figure_whole_gene
+mean_std_data
+plots
+doc
+stat
+*.zip
+*.pyc
+*.pkl
+*.dat
+*.eps
+*.png
+*.txt
