@@ -18,11 +18,11 @@ for dir_name in dirs:
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-manifest_path = run_needed + os.sep + "15_caner_manifest.tsv"
+manifest_path = run_needed + os.sep + "5_cancer_manifest.tsv"
 json_file_path = run_needed + os.sep + "metadata.json"
 tumor_suppressed_gene_file = run_needed + os.sep + "gene_with_protein_product.tsv"
 
-cancer_names = ["BRCA","COAD","LIHC", "LUAD","LUSC","BLCA" ,"ESCA" ,"HNSC" ,"KIRC" ,"KIRP" ,"PAAD" ,"PRAD" ,"READ" ,"THCA" ,"UCEC"] #
+cancer_names = ["BRCA", "COAD", "LIHC", "LUAD", "LUSC"]#, "BLCA" ,"ESCA" ,"HNSC" ,"KIRC" ,"KIRP" ,"PAAD" ,"PRAD" ,"READ" ,"THCA" ,"UCEC"] #
 cancer_markers = {"BRCA":'rs', "COAD":'gp', "LIHC":'bo',"LUAD":'kx',"LUSC":'c*'}
 
 tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
@@ -260,9 +260,11 @@ def convert_origin_profile_into_merged_profile(origin_profile_list):
             new_profile[gene].append([])
 
         for idx, item1 in enumerate(tumor_stages):
-            for idx2, item2 in enumerate(origin_profile[gene][idx]):
-                new_profile[gene][tumor_stages_xaxis2[tumor_stage_convert[item1]] - 1].append(item2)
-                new_profile_uuid[tumor_stage_convert[item1]].append(origin_profile_uuid[item1][idx2])
+            # print "%s\t%s\t%d\t%d" % (gene, item1, len(origin_profile[gene][idx]), len(origin_profile_uuid[item1]))
+            if len(origin_profile[gene][idx]) == len(origin_profile_uuid[item1]):
+                for idx2, item2 in enumerate(origin_profile[gene][idx]):
+                    new_profile[gene][tumor_stages_xaxis2[tumor_stage_convert[item1]] - 1].append(item2)
+                    new_profile_uuid[tumor_stage_convert[item1]].append(origin_profile_uuid[item1][idx2])
     return [new_profile, new_profile_uuid]
 #checked
 def plot_for_each_gene(cancer_name, gene_name, x, y, box_data, c, xrange, xticks, out_fig_path):
@@ -299,22 +301,23 @@ def merged_stage_scatter_and_box_plot(cancer_name, profile_arr, overwritten=Fals
     if not os.path.exists(figure_dir):
         os.makedirs(figure_dir)
     for gene_idx, gene in enumerate(TSG):
-        out_fig_path = fig_dir + os.sep + cancer_name + os.sep + gene.lower() + '.png'
-        if not overwritten:
-            if os.path.exists(out_fig_path):
-                continue
-        print "now plot scatter of %s %s" %(cancer_name, gene)
-        xs = range(1,len(merged_stage)+1)
-        new_profile[gene] = convert_origin_to_new_profile(profile[gene])
+        if gene in profile.keys():
+            out_fig_path = fig_dir + os.sep + cancer_name + os.sep + gene.lower() + '.png'
+            if not overwritten:
+                if os.path.exists(out_fig_path):
+                    continue
+            print "now plot scatter of %s %s" %(cancer_name, gene)
+            xs = range(1,len(merged_stage)+1)
+            new_profile[gene] = convert_origin_to_new_profile(profile[gene])
 
-        new_x_profile = []
-        new_y_profile = []
-        for idx, arr in enumerate(new_profile[gene]):
-            for item1 in arr:
-                ro = random.random() * 0.4 - 0.2
-                new_x_profile.append(idx + 1 + ro)
-                new_y_profile.append(item1)
-            plot_for_each_gene(cancer_name, gene, new_x_profile, new_y_profile, new_profile[gene], "blue", xs, merged_stage,out_fig_path)
+            new_x_profile = []
+            new_y_profile = []
+            for idx, arr in enumerate(new_profile[gene]):
+                for item1 in arr:
+                    ro = random.random() * 0.4 - 0.2
+                    new_x_profile.append(idx + 1 + ro)
+                    new_y_profile.append(item1)
+                plot_for_each_gene(cancer_name, gene, new_x_profile, new_y_profile, new_profile[gene], "blue", xs, merged_stage,out_fig_path)
 
 def init_mean_and_var_dict():
     means_dict = {}
@@ -342,58 +345,61 @@ def plot_mean_and_var(all_cancer_profiles):
     for idx, cancer_name in enumerate(cancer_names):
         profile = all_cancer_profiles[idx]
         for gene in TSG:
-            for idx_of_stage, stage_name in enumerate(merged_stage):
-                methy_of_this_gene = profile[gene][idx_of_stage]
-                #print "cancer %s gene %s stage %s len %d" % (cancer_name, gene, stage_name, len(methy_of_this_gene))
-                if len(methy_of_this_gene):
-                    mean_dict[gene][cancer_name].append(np.array(methy_of_this_gene).mean())
-                    var_dict[gene][cancer_name].append(np.array(methy_of_this_gene).std())
-                else:
-                    mean_dict[gene][cancer_name].append(0.0)
-                    var_dict[gene][cancer_name].append(0.0)
+            if gene in profile.keys():
+                for idx_of_stage, stage_name in enumerate(merged_stage):
+                    methy_of_this_gene = profile[gene][idx_of_stage]
+                    #print "cancer %s gene %s stage %s len %d" % (cancer_name, gene, stage_name, len(methy_of_this_gene))
+                    if len(methy_of_this_gene):
+                        mean_dict[gene][cancer_name].append(np.array(methy_of_this_gene).mean())
+                        var_dict[gene][cancer_name].append(np.array(methy_of_this_gene).std())
+                    else:
+                        mean_dict[gene][cancer_name].append(0.0)
+                        var_dict[gene][cancer_name].append(0.0)
     dicts = [mean_dict, var_dict]
     dict_names = ["mean", "std"]
     if not os.path.exists(methy_data_dir):
         os.makedirs(methy_data_dir)
     for gene in TSG:
         for idx, dict in enumerate(dicts):
-            dict_gene_i = dicts[idx][gene]
-            plt.clf()
-            plt.cla()
-            fig, ax = plt.subplots()
-            plt.xticks(range(1, len(merged_stage) - 1), merged_stage[0:-2])
+            if gene in dicts[idx].keys():
+                dict_gene_i = dicts[idx][gene]
+                plt.clf()
+                plt.cla()
+                fig, ax = plt.subplots()
+                plt.xticks(range(1, len(merged_stage) - 1), merged_stage[0:-2])
 
-            ax.set_title(dict_names[idx] + " methy-level of " + gene)
-            ax.set_xlim([0, len(merged_stage) - 1.5])
-            if idx == 1:
-                ax.set_ylim([0, 0.2])
-            else:
-                ax.set_ylim([0, 1.0])
-            plots = []
-            for cancer_name in cancer_names:
-                out_data_path = methy_data_dir + os.sep + gene + "_" + dict_names[idx] + "_" + cancer_name + ".dat"
-                vals = dict_gene_i[cancer_name]
-                x = range(1, len(vals) - 1)
-                y = vals[0 : -2]
-                out_data_file = open(out_data_path, "w")
-                for idx_x, x_val in enumerate(x):
-                    ltw = str(round(float(x_val), 2)) + "," + str(round(float(y[idx_x]), 4)) + "\n"
-                    out_data_file.write(ltw)
-                out_data_file.close()
+                ax.set_title(dict_names[idx] + " methy-level of " + gene)
+                ax.set_xlim([0, len(merged_stage) - 1.5])
+                if idx == 1:
+                    ax.set_ylim([0, 0.2])
+                else:
+                    ax.set_ylim([0, 1.0])
+                plots = []
+                for cancer_name in cancer_names:
+                    out_data_path = methy_data_dir + os.sep + gene + "_" + dict_names[idx] + "_" + cancer_name + ".dat"
+                    vals = dict_gene_i[cancer_name]
+                    x = range(1, len(vals) - 1)
+                    y = vals[0 : -2]
+                    out_data_file = open(out_data_path, "w")
+                    for idx_x, x_val in enumerate(x):
+                        ltw = str(round(float(x_val), 2)) + "," + str(round(float(y[idx_x]), 4)) + "\n"
+                        out_data_file.write(ltw)
+                    out_data_file.close()
 
-                plot, = plt.plot(x, y, cancer_markers[cancer_name], ls="-")
-                plots.append(plot)
-            ax.legend(plots, cancer_names, loc='best')
-            plt.savefig(paths[idx] + gene.lower() + '.png')
+                    plot, = plt.plot(x, y, cancer_markers[cancer_name], ls="-")
+                    plots.append(plot)
+                ax.legend(plots, cancer_names, loc='best')
+                plt.savefig(paths[idx] + gene.lower() + '.png')
 def save_cancer_std_and_mean_of_all_genes(cancer_name, cancer_profile_arr, stage_names, out_dir="."):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     cancer_profile = cancer_profile_arr[0]
     for gene in TSG:
-        for idx_of_stage, stage_name in enumerate(stage_names):
-            methy_of_this_gene = cancer_profile[gene][idx_of_stage]
-            mean_dict[gene][cancer_name].append(np.array(methy_of_this_gene).mean())
-            var_dict[gene][cancer_name].append(np.array(methy_of_this_gene).std())
+        if gene in cancer_profile.keys():
+            for idx_of_stage, stage_name in enumerate(stage_names):
+                methy_of_this_gene = cancer_profile[gene][idx_of_stage]
+                mean_dict[gene][cancer_name].append(np.array(methy_of_this_gene).mean())
+                var_dict[gene][cancer_name].append(np.array(methy_of_this_gene).std())
     dict_names = ["mean", "std"]
     dicts = [mean_dict, var_dict]
     header = ["gene"]
@@ -405,54 +411,56 @@ def save_cancer_std_and_mean_of_all_genes(cancer_name, cancer_profile_arr, stage
         out_data_file = open(out_data_path, "w")
         out_data_file.write(",".join(header) + "\n")
         for gene in TSG:
-            data = []
-            flag = True
-            for item in dict_val[gene][cancer_name]:
-                if item != item:
-                    flag = False
-                    break
-                else:
-                    data.append(str(round(float(item), 4)))
-            if flag:
-                ltw = gene + "," + ",".join(data) + "\n"
-                out_data_file.write(ltw)
+            if gene in dict_val.keys():
+                data = []
+                flag = True
+                for item in dict_val[gene][cancer_name]:
+                    if item != item:
+                        flag = False
+                        break
+                    else:
+                        data.append(str(round(float(item), 4)))
+                if flag:
+                    ltw = gene + "," + ",".join(data) + "\n"
+                    out_data_file.write(ltw)
         out_data_file.close()
     print "write std and means into %s successful" % out_dir
 def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_xy=False, out_all_stage=False):
     if not os.path.exists(methy_data_dir):
         os.makedirs(methy_data_dir)
+    profile = profile_list[0]
     for gene in TSG:
-        gene_data = profile_list[0][gene]
-        merged_data = []
-
-        ltws_xy = []
-        ltws_y = []
-        for idx, stage in enumerate(merged_stage):
-            if stage in out_stage_list:
-                methy_cases_vals = gene_data[idx]
-                for item_y in methy_cases_vals:
-                    ro = random.random()*0.3 - 0.15
-                    x = idx + 1 + ro
-                    if out_xy:
-                        ltw = str(round(float(x), 4)) + "," + str(round(float(item_y), 6)) + "\n"
-                        ltws_xy.append(ltw)
-                        tmp_stage = "n" if stage == "normal" else stage
-                        ltw2 = str(round(float(item_y), 6)) + "," + tmp_stage.ljust(4) + "\n"
-                        ltws_y.append(ltw2)
-                stage_data = gene_data[idx]
-                merged_data.extend(stage_data)
-                save_data_to_file(stage_data, methy_data_dir + os.sep + gene + "_" + merged_stage[idx] + "_" + cancer_name + ".dat")
-        if out_xy:
-            out_xy_path = methy_data_dir + os.sep + gene + "_xy_" + cancer_name + ".dat"
-            out_y_label_path = methy_data_dir + os.sep + gene + "_y_label_" + cancer_name + ".dat"
-            out_xy_file = open(out_xy_path, "w")
-            out_y_label_file = open(out_y_label_path, "w")
-            out_xy_file.write("\n".join(ltws_xy))
-            out_y_label_file.write("\n".join(ltws_y))
-            out_xy_file.close()
-            out_y_label_file.close()
-        if out_all_stage:
-            save_data_to_file(merged_data,  methy_data_dir + os.sep + gene + "_" + "all_stage" + "_" + cancer_name + ".dat")
+        if gene in profile.keys():
+            gene_data = profile[gene]
+            merged_data = []
+            ltws_xy = []
+            ltws_y = []
+            for idx, stage in enumerate(merged_stage):
+                if stage in out_stage_list:
+                    methy_cases_vals = gene_data[idx]
+                    for item_y in methy_cases_vals:
+                        ro = random.random()*0.3 - 0.15
+                        x = idx + 1 + ro
+                        if out_xy:
+                            ltw = str(round(float(x), 4)) + "," + str(round(float(item_y), 6)) + "\n"
+                            ltws_xy.append(ltw)
+                            tmp_stage = "n" if stage == "normal" else stage
+                            ltw2 = str(round(float(item_y), 6)) + "," + tmp_stage.ljust(4) + "\n"
+                            ltws_y.append(ltw2)
+                    stage_data = gene_data[idx]
+                    merged_data.extend(stage_data)
+                    save_data_to_file(stage_data, methy_data_dir + os.sep + gene + "_" + merged_stage[idx] + "_" + cancer_name + ".dat")
+            if out_xy:
+                out_xy_path = methy_data_dir + os.sep + gene + "_xy_" + cancer_name + ".dat"
+                out_y_label_path = methy_data_dir + os.sep + gene + "_y_label_" + cancer_name + ".dat"
+                out_xy_file = open(out_xy_path, "w")
+                out_y_label_file = open(out_y_label_path, "w")
+                out_xy_file.write("\n".join(ltws_xy))
+                out_y_label_file.write("\n".join(ltws_y))
+                out_xy_file.close()
+                out_y_label_file.close()
+            if out_all_stage:
+                save_data_to_file(merged_data,  methy_data_dir + os.sep + gene + "_" + "all_stage" + "_" + cancer_name + ".dat")
     print "save methy data successfully!"
 
 def get_stage_idx_from_stage_name(stage_name):
@@ -576,19 +584,20 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
             header = "gene\t" + "\t".join(profile_uuid[stage_name]) + "\n"
             outfile.write(header)
             for gene in TSG:
-                gene_valid = True
-                methy_vals = []
+                if gene in profile.keys():
+                    gene_valid = True
+                    methy_vals = []
 
-                for item in profile[gene][stage_idx]:
-                    item_str = str(round(item,4))
-                    if item_str == "nan":
-                        gene_valid = False
-                        break
-                    else:
-                        methy_vals.append(item_str)
-                if gene_valid:
-                    data_str = gene + "\t" + "\t".join(methy_vals) + "\n"
-                    outfile.write(data_str)
+                    for item in profile[gene][stage_idx]:
+                        item_str = str(round(item,4))
+                        if item_str == "nan":
+                            gene_valid = False
+                            break
+                        else:
+                            methy_vals.append(item_str)
+                    if gene_valid:
+                        data_str = gene + "\t" + "\t".join(methy_vals) + "\n"
+                        outfile.write(data_str)
             outfile.close()
     print "%s dump_data_into_tsv_according_to_cancer_type_and_stage" % cancer_name
 if __name__ == '__main__':
@@ -608,16 +617,17 @@ if __name__ == '__main__':
         # temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=False, whole_genes= True)
 
         #server script
-        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuid_dict[cancer_name], load=False, whole_genes= True)
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuid_dict[cancer_name], load=True, whole_genes= True)
         # save_cancer_std_and_mean_of_all_genes(cancer_name, temp_profile_list, [normal_keyword, "i"],out_dir="mean_std_data")
     # cmp_gene_variations_in_mean_and_std(cancer_names, stat_names, stat_epsilons, normal_keyword, "i", input_dir ="mean_std_data", out_dir="stat")
         # merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
-        # new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
-        # out_dir = tsv_dir + os.sep + cancer_name
-        # if not os.path.exists(out_dir):
-        #     os.makedirs(out_dir)
-        # dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
+        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+        save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=False, out_all_stage=False)
+        out_dir = tsv_dir + os.sep + cancer_name
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
 
-        # save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=False, out_all_stage=False)
+
         #all_cancer_profiles.append(new_profile_list[0])
     #plot_mean_and_var(all_cancer_profiles)
