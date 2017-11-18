@@ -255,6 +255,8 @@ def convert_origin_profile_into_merged_profile(origin_profile_list):
     new_profile = {gene:[] for gene in TSG}
     new_profile_uuid = {stage:[] for stage in merged_stage}
 
+    for idx, item1 in enumerate(tumor_stages):
+        new_profile_uuid[tumor_stage_convert[item1]].extend(origin_profile_uuid[item1])
     for gene in TSG:
         for stage in merged_stage:
             new_profile[gene].append([])
@@ -264,7 +266,6 @@ def convert_origin_profile_into_merged_profile(origin_profile_list):
             if len(origin_profile[gene][idx]) == len(origin_profile_uuid[item1]):
                 for idx2, item2 in enumerate(origin_profile[gene][idx]):
                     new_profile[gene][tumor_stages_xaxis2[tumor_stage_convert[item1]] - 1].append(item2)
-                    new_profile_uuid[tumor_stage_convert[item1]].append(origin_profile_uuid[item1][idx2])
     return [new_profile, new_profile_uuid]
 #checked
 def plot_for_each_gene(cancer_name, gene_name, x, y, box_data, c, xrange, xticks, out_fig_path):
@@ -622,7 +623,7 @@ if __name__ == '__main__':
     # cmp_gene_variations_in_mean_and_std(cancer_names, stat_names, stat_epsilons, normal_keyword, "i", input_dir ="mean_std_data", out_dir="stat")
         # merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
         new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
-        save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=False, out_all_stage=False)
+        # save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=False, out_all_stage=False)
         out_dir = tsv_dir + os.sep + cancer_name
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
