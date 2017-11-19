@@ -18,15 +18,16 @@ for dir_name in dirs:
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-manifest_path = run_needed + os.sep + "5_cancer_manifest.tsv"
-json_file_path = run_needed + os.sep + "metadata.json"
+manifest_path = run_needed + os.sep + "10_cancer_manifest.tsv"
+json_file_path = run_needed + os.sep + "10_cancer_meta.json"
 tumor_suppressed_gene_file = run_needed + os.sep + "gene_with_protein_product.tsv"
 
-cancer_names = ["BRCA", "COAD", "LIHC", "LUAD", "LUSC"]#, "BLCA" ,"ESCA" ,"HNSC" ,"KIRC" ,"KIRP" ,"PAAD" ,"PRAD" ,"READ" ,"THCA" ,"UCEC"] #
+cancer_names = ["BLCA" ,"ESCA","HNSC" ,"KIRC" ,"KIRP" ,"PAAD" ,"PRAD" ,"READ" ,"THCA" ,"UCEC"]#, ] # ,;"BRCA", "COAD", "LIHC", "LUAD", "LUSC",
 cancer_markers = {"BRCA":'rs', "COAD":'gp', "LIHC":'bo',"LUAD":'kx',"LUSC":'c*'}
 
-tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
-tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","x":"x","not reported":"not reported"}
+tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","ivc","x","not reported"]
+tumor_stages_rm_ivc = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
+tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
 normal_keyword = "normal"
 
@@ -254,14 +255,14 @@ def convert_origin_profile_into_merged_profile(origin_profile_list):
     [origin_profile, origin_profile_uuid] = origin_profile_list
     new_profile = {gene:[] for gene in TSG}
     new_profile_uuid = {stage:[] for stage in merged_stage}
-
-    for idx, item1 in enumerate(tumor_stages):
+    tmp_tumor_stages = tumor_stages if "ivc" in origin_profile_uuid.keys() else tumor_stages_rm_ivc
+    for idx, item1 in enumerate(tmp_tumor_stages):
         new_profile_uuid[tumor_stage_convert[item1]].extend(origin_profile_uuid[item1])
     for gene in TSG:
         for stage in merged_stage:
             new_profile[gene].append([])
 
-        for idx, item1 in enumerate(tumor_stages):
+        for idx, item1 in enumerate(tmp_tumor_stages):
             # print "%s\t%s\t%d\t%d" % (gene, item1, len(origin_profile[gene][idx]), len(origin_profile_uuid[item1]))
             if len(origin_profile[gene][idx]) == len(origin_profile_uuid[item1]):
                 for idx2, item2 in enumerate(origin_profile[gene][idx]):
@@ -611,17 +612,18 @@ if __name__ == '__main__':
         print "now start %s" % cancer_name
         data_path = data_dir + os.sep+ cancer_name + os.sep
         pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
-
+        if cancer_name in ["BRCA", "COAD", "LIHC"]:
+            continue
         #local scripts
         # filenames = os.listdir(data_path)
         # uuids = get_exist_uuids_from_filenames(filenames)
-        # temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuids, load=False, whole_genes= True)
+        # temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuids, load=True, whole_genes= True)
 
         #server script
         temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath,uuid_dict[cancer_name], load=True, whole_genes= True)
         # save_cancer_std_and_mean_of_all_genes(cancer_name, temp_profile_list, [normal_keyword, "i"],out_dir="mean_std_data")
     # cmp_gene_variations_in_mean_and_std(cancer_names, stat_names, stat_epsilons, normal_keyword, "i", input_dir ="mean_std_data", out_dir="stat")
-        # merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
+    #     merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
         new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
         # save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=False, out_all_stage=False)
         out_dir = tsv_dir + os.sep + cancer_name
