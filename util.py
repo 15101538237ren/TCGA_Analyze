@@ -18,11 +18,11 @@ for dir_name in dirs:
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-manifest_path = run_needed + os.sep + "10_cancer_manifest.tsv"
-json_file_path = run_needed + os.sep + "10_cancer_meta.json"
+manifest_path = run_needed + os.sep + "24_cancer_manifest.tsv"
+json_file_path = run_needed + os.sep + "24_cancer_meta.json"
 tumor_suppressed_gene_file = run_needed + os.sep + "gene_with_protein_product.tsv"
 
-cancer_names = ["BLCA" ,"ESCA","HNSC" ,"KIRC" ,"KIRP" ,"PAAD" ,"PRAD" ,"READ" ,"THCA" ,"UCEC"]#, ] # ,;"BRCA", "COAD", "LIHC", "LUAD", "LUSC",
+cancer_names = ["BRCA", "COAD", "LIHC", "LUAD", "LUSC","BLCA" ,"ESCA","HNSC" ,"KIRC", "KIRP", "PAAD", "READ", "THCA", "STAD","LGG","OV","GBM","LAML", "PRAD","UCEC","SARC", "UVM","CESC", "DLBC"]#, ] # ,;"LGG","OV","GBM","LAML", "PRAD","UCEC","SARC", "UVM","CESC", "DLBC",
 cancer_markers = {"BRCA":'rs', "COAD":'gp', "LIHC":'bo',"LUAD":'kx',"LUSC":'c*'}
 
 tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","ivc","x","not reported"]
@@ -92,11 +92,15 @@ def connect_filename_to_uuid():
         if match_p:
             uuid = match_p.group(1)
             file_name = match_p.group(2)
-            cancer_name = re.search(cancer_pattern, file_name).group(1)
+
             uuid_to_filename[uuid] = file_name
             filename_to_uuid[file_name] = uuid
-            uuid_dict[cancer_name].append(uuid)
-            file_name_dict[cancer_name].append(file_name)
+            try:
+                cancer_name = re.search(cancer_pattern, file_name).group(1)
+                uuid_dict[cancer_name].append(uuid)
+                file_name_dict[cancer_name].append(file_name)
+            except AttributeError:
+                print file_name
             # print "%s\t%s" % (uuid, file_name)
 
         line=now_file.readline()
@@ -392,6 +396,7 @@ def plot_mean_and_var(all_cancer_profiles):
                     plots.append(plot)
                 ax.legend(plots, cancer_names, loc='best')
                 plt.savefig(paths[idx] + gene.lower() + '.png')
+
 def save_cancer_std_and_mean_of_all_genes(cancer_name, cancer_profile_arr, stage_names, out_dir="."):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -427,6 +432,8 @@ def save_cancer_std_and_mean_of_all_genes(cancer_name, cancer_profile_arr, stage
                     out_data_file.write(ltw)
         out_data_file.close()
     print "write std and means into %s successful" % out_dir
+
+#保存cancer_name癌症,out_stage_list中阶段的DNA甲基化数据
 def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_xy=False, out_all_stage=False):
     if not os.path.exists(methy_data_dir):
         os.makedirs(methy_data_dir)
@@ -439,11 +446,11 @@ def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_xy=False
             ltws_y = []
             for idx, stage in enumerate(merged_stage):
                 if stage in out_stage_list:
-                    methy_cases_vals = gene_data[idx]
-                    for item_y in methy_cases_vals:
-                        ro = random.random()*0.3 - 0.15
-                        x = idx + 1 + ro
-                        if out_xy:
+                    if out_xy:
+                        methy_cases_vals = gene_data[idx]
+                        for item_y in methy_cases_vals:
+                            ro = random.random()*0.3 - 0.15
+                            x = idx + 1 + ro
                             ltw = str(round(float(x), 4)) + "," + str(round(float(item_y), 6)) + "\n"
                             ltws_xy.append(ltw)
                             tmp_stage = "n" if stage == "normal" else stage
@@ -471,6 +478,7 @@ def get_stage_idx_from_stage_name(stage_name):
             return idx
     return -1
 #比较对比组和癌症组的基因数量变化
+
 def cmp_gene_variations_in_mean_and_std(cancer_names, stats_names, stat_epsilons, control_stage, exp_stage, input_dir,out_dir="."):
     print "cmp_gene_variations_in_mean_and_std in"
     data_dict = {}
@@ -576,6 +584,8 @@ def cmp_gene_variations_in_mean_and_std(cancer_names, stats_names, stat_epsilons
     out_lei_count.close()
     out_lei_percentage.close()
     print "cmp_gene_variations_in_mean_and_std success"
+
+#将某癌症数据写入到tsv文件中
 def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list, outdir, profile_list):
     [profile, profile_uuid] = profile_list
 
@@ -589,7 +599,6 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
                 if gene in profile.keys():
                     gene_valid = True
                     methy_vals = []
-
                     for item in profile[gene][stage_idx]:
                         item_str = str(round(item,4))
                         if item_str == "nan":
@@ -602,18 +611,50 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
                         outfile.write(data_str)
             outfile.close()
     print "%s dump_data_into_tsv_according_to_cancer_type_and_stage" % cancer_name
+
+#获取所有染色体的dna序列,存储在sequence_dict对应chr_i的字典中
+
+def get_all_dna_sequences(dna_dir, file_pre, chr_list):
+    sequence_dict = {}
+    for chr_i in chr_list:
+        chr_i = str(chr_i)
+        dna_path = dna_dir + os.sep + file_pre + chr_i + ".fa"
+        dna_file = open(dna_path, "r")
+        line_seq = dna_file.readline()
+        match = re.search(r'chromosome:([^:]+):(\d*):(\d*):(\d*)',line_seq)
+        if match:
+            sequence_length = int(match.group(4))
+            print "chr %s len : %d" % (chr_i, sequence_length)
+
+            seq_arr = []
+            while line_seq:
+                line_seq = dna_file.readline()
+                seq_arr.append(line_seq[0 : -1])
+            sequence_dict[chr_i] = "".join(seq_arr)
+        print "finish chr %s" % chr_i
+    return [sequence_dict]
+
+# 查询chr_i (int)在区间(start, end)的序列, sequence_list为get_all_dna_sequences返回的[sequence_dict]
+def query_a_sequence(sequence_list, chr_i, start, end):
+    return sequence_list[0][str(chr_i)][start + 1: end + 1]
+
 if __name__ == '__main__':
+    dna_dir = data_dir + os.sep + "GRCh38"
+    file_pre = "Homo_sapiens.GRCh38.dna.chromosome."
+    chr_list = range(1, 2)
+    sequence_rtn = get_all_dna_sequences(dna_dir, file_pre, chr_list)
+
     all_cancer_profiles = []
     stat_names = ["mean","std"]
     stat_epsilons = [0.05, 0.05]
     out_stage_list = ["normal","i"]
 
     for cancer_name in cancer_names:
+        if cancer_name in ["LGG","OV","GBM","LAML", "PRAD","UCEC","SARC", "UVM","CESC", "DLBC"]:
+            continue
         print "now start %s" % cancer_name
         data_path = data_dir + os.sep+ cancer_name + os.sep
         pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
-        if cancer_name in ["BRCA", "COAD", "LIHC"]:
-            continue
         #local scripts
         # filenames = os.listdir(data_path)
         # uuids = get_exist_uuids_from_filenames(filenames)
@@ -626,11 +667,10 @@ if __name__ == '__main__':
     #     merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
         new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
         # save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=False, out_all_stage=False)
-        out_dir = tsv_dir + os.sep + cancer_name
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
-
+        # out_dir = tsv_dir + os.sep + cancer_name
+        # if not os.path.exists(out_dir):
+        #     os.makedirs(out_dir)
+        # dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
 
         #all_cancer_profiles.append(new_profile_list[0])
     #plot_mean_and_var(all_cancer_profiles)

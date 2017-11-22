@@ -72,6 +72,6 @@ def move_files_according_to_cancer_type(src_dir, dst_dir):
     print "moved successfully!"
 if __name__ == '__main__':
     #check_download_interrupt("10_caner_manifests.tsv", "downloads")
-    exclude_data_list_from_file("9_type_cancer_1116.tsv","data_list.txt","9_type_cancer_1116_new.tsv")
+    # exclude_data_list_from_file("9_type_cancer_1116.tsv","data_list.txt","9_type_cancer_1116_new.tsv")
     # exclude_data_list_from_path("run_needed/10_cancer_manifest.tsv", "data", "10_cancer_manifest_new.tsv")
-    # move_files_according_to_cancer_type("remind_files","data")
+    move_files_according_to_cancer_type("remind_files","data")
