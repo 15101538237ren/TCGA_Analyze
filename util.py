@@ -1,10 +1,9 @@
 # -*- coding:utf-8 -*-
 import os, math, re, json, time, pickle, random
+import pandas as pd
 import numpy as np
-# import matplotlib
-# matplotlib.use('Agg') # or matplotlib.use("Pdf")
 import matplotlib.pyplot as plt
-
+import requests
 #preparation files
 data_dir = "data"
 pickle_dir = "pkl"
@@ -13,21 +12,23 @@ methy_data_dir = "methy_data"
 tsv_dir = "tsv_data"
 mean_and_var_fig_dir = "mean_and_std_figure"
 run_needed = "run_needed"
+snv_base_dir = "snv"
 dirs = [data_dir, pickle_dir, fig_dir, tsv_dir, methy_data_dir, mean_and_var_fig_dir, run_needed]
 for dir_name in dirs:
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-manifest_path = run_needed + os.sep + "5_cancer_manifest.tsv"
-json_file_path = run_needed + os.sep + "5_cancer_meta.json"
+manifest_path = run_needed + os.sep + "24_cancer_manifest.tsv"
+json_file_path = run_needed + os.sep + "24_cancer_meta.json"
 tumor_suppressed_gene_file = run_needed + os.sep + "gene_with_protein_product.tsv"
 
-cancer_names = ["BRCA", "COAD", "LIHC", "LUAD", "LUSC"] #,"BLCA" ,"ESCA","HNSC" ,"KIRC", "KIRP", "PAAD", "READ", "THCA", "STAD","LGG","OV","GBM","LAML", "PRAD","UCEC","SARC", "UVM","CESC", "DLBC"
+cancer_names = ["BRCA", "COAD", "LIHC", "LUAD", "LUSC","BLCA" ,"ESCA","HNSC" ,"KIRC", "KIRP", "PAAD", "READ", "THCA", "STAD","LGG","OV","GBM","LAML", "PRAD","UCEC","SARC", "UVM","CESC", "DLBC"] #,
 
 tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","ivc","x","not reported"]
 tumor_stages_rm_ivc = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
+merged_stage_n = ["normal","i","ii","iii","iv","x"]
 
 tumor_stages_xaxis = {}
 for idx, item in enumerate(tumor_stages):
@@ -69,7 +70,7 @@ def read_whole_genenames(file_path):
     now_file.close()
     return [genes, alias_dict]
 
-[TSG, alias_dict] = read_genenames(tumor_suppressed_gene_file)
+[TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_file)
 print "genome gene counts %d" % len(TSG)
 
 
@@ -379,20 +380,6 @@ def get_all_dna_sequences(dna_dir, file_pre, chr_list):
 def query_a_sequence(sequence_list, chr_i, start, end):
     return sequence_list[0][str(chr_i)][start + 1: end + 1]
 
-def run_cpg_stat_pipline():
-    dna_dir = data_dir + os.sep + "GRCh38"
-    file_pre = "Homo_sapiens.GRCh38.dna.chromosome."
-    chr_list = range(1, 23)
-    sequence_rtn = get_all_dna_sequences(dna_dir, file_pre, chr_list)
-
-def plot_scatter_pipline():
-    for cancer_name in cancer_names:
-        print "now start %s" % cancer_name
-        data_path = data_dir + os.sep+ cancer_name + os.sep
-        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
-        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
-        merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
-
 #将某癌症数据写入到tsv文件中
 def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list, outdir, profile_list):
     [profile, profile_uuid] = profile_list
@@ -420,27 +407,86 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
             outfile.close()
     print "%s dump_data_into_tsv_according_to_cancer_type_and_stage" % cancer_name
 
-def save_gene_methy_data_pipeline():
-    out_stage_list = ["normal","i","ii","iii","iv"]
-    for cancer_name in cancer_names:
-        print "now start %s" % cancer_name
-        data_path = data_dir + os.sep+ cancer_name + os.sep
-        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
-        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
-        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
-        save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=True, out_all_stage=True)
+def query_stage_of_an_submitter_id(submitter_id):
+    cases_endpt = 'https://api.gdc.cancer.gov/cases'
+    filt = {"op":"and","content":[{"op":"in","content":{"field":"submitter_id","value":[submitter_id]}}]}
+    params = {'filters':json.dumps(filt), 'fields':'diagnoses.tumor_stage'}
+    # requests URL-encodes automatically
+    response = requests.get(cases_endpt, params = params)
+    ret_obj = response.json()
+    stage = "not reported"
+    if "hits" in ret_obj["data"].keys() and  "diagnoses" in ret_obj["data"]["hits"][0].keys() and len(ret_obj["data"]["hits"][0]["diagnoses"]):
+        stage = ret_obj["data"]["hits"][0]["diagnoses"][0]["tumor_stage"].split(" ")[1]
+    print "query %s finished %s " % (submitter_id, stage)
+    return stage
+def dna_mutation_data_transform_pipline(load = False):
+    outdir ="snv_dat"
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    data_pkl_path = os.path.join(outdir, "data.pkl")
+    if not load:
+        #create gene_index_file
+        with open(os.path.join(outdir, "gene_idx.txt"),"w") as gene_idx_file:
+            gene_idx_file.write("\n".join([str(gidx+1) + "\t" + gene for gidx, gene in enumerate(TSG)]))
 
-def dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile():
-    for cancer_name in cancer_names:
-        print "now start %s" % cancer_name
-        data_path = data_dir + os.sep+ cancer_name + os.sep
-        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
-        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+        colum_idxs = [0, 8, 15, 32] #要提取maf文件的列编号
+        data_pkl_dict = {}
+        for cancer_name in cancer_names:
+            cancer_dir = os.path.join(snv_base_dir, cancer_name)
+            if os.path.exists(cancer_dir):
+                data_dict = {stage:{} for stage in merged_stage}
+                uuid_to_stage_dict = {}
+                file_names = os.listdir(cancer_dir)
+                for file_name in file_names:
+                    if not file_name.startswith("."):
+                        file_path = os.path.join(cancer_dir,file_name)
+                        snv_file = open(file_path, "r")
+                        print "%s start %s" % (cancer_name, file_path)
+                        # pass head 6 lines
+                        for i in range(6):
+                            snv_file.readline()
+                        line = snv_file.readline()
+                        while line:
+                            line_contents = line.split("\t")
+                            [gene_name, variation_classification, bar_code, uuid] = [line_contents[i] for i in colum_idxs]
+                            submitter_id = "-".join(bar_code.split("-")[0:3])
 
-        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
-        out_dir = tsv_dir + os.sep + cancer_name
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
+                            if submitter_id not in uuid_to_stage_dict.keys():
+                                uuid_to_stage_dict[submitter_id] = query_stage_of_an_submitter_id(submitter_id)
+                            stage = tumor_stage_convert[uuid_to_stage_dict[submitter_id]]
+                            if gene_name in TSG and variation_classification == "Missense_Mutation":
+                                if submitter_id not in data_dict[stage].keys():
+                                    data_dict[stage][submitter_id] = {gene : 0 for gene in TSG}
+                                data_dict[stage][submitter_id][gene_name] += 1
+                            line = snv_file.readline()
+                        print "end %s" % file_path
+                data_pkl_dict[cancer_name]=[data_dict, uuid_to_stage_dict]
+        pickle_file = open(data_pkl_path, 'wb')
+        pickle.dump(data_pkl_dict,pickle_file,-1)
+        pickle_file.close()
+    else:
+        pickle_file = open(data_pkl_path,"rb")
+        [data_dict, uuid_to_stage_dict] = pickle.load(pickle_file)
+        pickle_file.close()
+        print "load pickle file %s finished" % (data_pkl_path)
+    for cancer_name in cancer_names:
+        cancer_dir = os.path.join(snv_base_dir, cancer_name)
+        if os.path.exists(cancer_dir):
+            for cancer_stage in merged_stage_n:
+                submitter_ids = data_dict[cancer_stage].keys()
+                #create sample id file
+                with open(os.path.join(outdir, "Mut_"+cancer_name+"_"+cancer_stage+"_sample_id.txt"),"w") as sample_id_file:
+                    sample_id_file.write("\n".join([str(gidx+1) + "\t" + submitter_id for gidx, submitter_id in enumerate(submitter_ids)]))
+                with open(os.path.join(outdir, "Mut_"+cancer_name+"_"+cancer_stage+".dat"),"w") as data_file:
+                    header = "\t".join([str(item) for item in range(len(submitter_ids) + 1)]) + "\n"
+                    data_file.write(header)
+                    data_str = []
+                    for gidx,gene  in enumerate(TSG):
+                        arr = [gidx + 1]
+                        arr.extend([data_dict[cancer_stage][submitter_id][gene] for submitter_id in submitter_ids])
+                        data_str.append("\t".join([str(item) for item in arr]))
+                    data_file.write("\n".join(data_str))
 if __name__ == '__main__':
-    save_gene_methy_data_pipeline()
+    dna_mutation_data_transform_pipline(load=False)
+    # uuid = "1f601832-eee3-48fb-acf5-80c4a454f26e"
+    # query_stage_of_an_uuid(uuid)

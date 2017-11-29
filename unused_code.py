@@ -258,8 +258,46 @@ def cmp_gene_variations_in_mean_and_std(cancer_names, stats_names, stat_epsilons
     print "cmp_gene_variations_in_mean_and_std success"
 
 
+def run_cpg_stat_pipline():
+    dna_dir = data_dir + os.sep + "GRCh38"
+    file_pre = "Homo_sapiens.GRCh38.dna.chromosome."
+    chr_list = range(1, 23)
+    sequence_rtn = get_all_dna_sequences(dna_dir, file_pre, chr_list)
+
+def plot_scatter_pipline():
+    for cancer_name in cancer_names:
+        print "now start %s" % cancer_name
+        data_path = data_dir + os.sep+ cancer_name + os.sep
+        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+        merged_stage_scatter_and_box_plot(cancer_name, temp_profile_list, overwritten=False)
 
 
+def save_gene_methy_data_pipeline():
+    out_stage_list = ["normal","i","ii","iii","iv"]
+    for cancer_name in cancer_names:
+        print "now start %s" % cancer_name
+        data_path = data_dir + os.sep+ cancer_name + os.sep
+        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+        save_gene_methy_data(cancer_name, new_profile_list, out_stage_list, out_xy=True, out_all_stage=True)
+
+def dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile():
+    for cancer_name in cancer_names:
+        # print "now start %s" % cancer_name
+        data_path = data_dir + os.sep+ cancer_name + os.sep
+        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+        profile = new_profile_list[0]
+        normal_count = len(profile["APC"][0])
+        i_count = len(profile["APC"][1])
+        print "%s\t%d\t%d" % (cancer_name, normal_count, i_count)
+        out_dir = tsv_dir + os.sep + cancer_name
+        # if not os.path.exists(out_dir):
+        #     os.makedirs(out_dir)
+        # dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
 
 if __name__ == '__main__':
     dna_dir = data_dir + os.sep + "GRCh38"
