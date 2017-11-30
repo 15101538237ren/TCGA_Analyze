@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 import os, json
-
+import numpy as np
 from util import read_whole_genenames
 cancer_names = ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]
 
@@ -57,7 +57,7 @@ def read_tab_seperated_file_and_get_target_column(target_col_index, input_file_p
         line = input_file.readline()
         while line:
             line_contents = line.split("\t")
-            if target_col_index== len(line_contents)-1:
+            if line_contents[target_col_index].endswith("\n"):
                 value = line_contents[target_col_index][0:-1]
             else:
                 value = line_contents[target_col_index]
@@ -183,6 +183,14 @@ def connect_whole_genome_to_ensembl_gene_symbol_index(whole_gene_idx_filepath , 
             ltw.append("\t".join([str(origin_index), str(gene_symbol_index)]))
         out_correspondent_index_file.write("\n".join(ltw))
     print "connect_whole_genome_to_ensembl_gene_symbol_index successful"
+
+#计算一个fpkm文件中每个基因的tpm值
+def compute_tpm_for_a_htseq_count_file(fpkm_file_path):
+    fpkm_values = [float(value) for value in read_tab_seperated_file_and_get_target_column(1, fpkm_file_path)]
+    sum_of_fpkm = float(np.array(fpkm_values).sum())
+    tpm_values = [(fpkm_value / sum_of_fpkm) * 1000000.0 for fpkm_value in fpkm_values]
+    return tpm_values
+
 #some global variables
 gene_idx_path = os.path.join(rna_out_dir, "gene_idx.txt")
 if not os.path.exists(gene_idx_path):
@@ -198,6 +206,36 @@ if not os.path.exists(gene_symbols_filepath):
 correspondent_index_path = os.path.join(rna_out_dir, "correspondent_index.txt")
 if not os.path.exists(correspondent_index_path):
     connect_whole_genome_to_ensembl_gene_symbol_index(gene_idx_path, gene_symbols_filepath,correspondent_index_path)
+
+
+def generate_tpm_table_for_each_cancer_and_each_stage():
+    correspondent_indexs = [int(value) for value in read_tab_seperated_file_and_get_target_column(1 , correspondent_index_path)]
+    for cancer_name in cancer_names:
+        cancer_data_dir = os.path.join(rna_data_dir, cancer_name)
+        output_cancer_dir = os.path.join(rna_out_dir, cancer_name)
+        htseq_filelist_path = os.path.join(output_cancer_dir, cancer_name + "_htseq_filelist.txt")
+        stages_path = os.path.join(output_cancer_dir, cancer_name + "_stages.txt")
+        htseq_filenames = read_tab_seperated_file_and_get_target_column(1, htseq_filelist_path)
+        htseq_case_ids = [htseq_filename[0 : -13] for htseq_filename in htseq_filenames]
+        stages = read_tab_seperated_file_and_get_target_column(1, stages_path)
+        stage_to_its_htseq = { stage: [] for stage in merged_stage}
+        for hidx, htseq_case_id in enumerate(htseq_case_ids):
+            stage = stages[hidx]
+            stage_to_its_htseq[stage].append(htseq_case_id)
+        for stage in merged_stage_n:
+            htseq_case_id_list = stage_to_its_htseq[stage]
+            write_tab_seperated_file_for_a_list(os.path.join(output_cancer_dir, stage + "_case_ids.txt"), htseq_case_id_list, index_included=True)
+
+            print "%s, %s, %d" %(cancer_name, stage, len(htseq_case_id_list))
+            for htseq_case_id in htseq_case_id_list:
+                fpkm_filepath = os.path.join(cancer_data_dir, htseq_case_id + ".FPKM.txt")
+                tpm_values = compute_tpm_for_a_htseq_count_file(fpkm_filepath)
+                filtered_tpm_values = []
+                for correspondent_index in correspondent_indexs:
+                  if correspondent_index < 0:
+                      filtered_tpm_values.append(-1)
+                  else:
+                      filtered_tpm_values.append(tpm_values[correspondent_index - 1])
 if __name__ == '__main__':
-    pass
+    generate_tpm_table_for_each_cancer_and_each_stage()
 
