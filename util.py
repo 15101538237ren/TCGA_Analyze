@@ -28,7 +28,7 @@ tumor_stages = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib
 tumor_stages_rm_ivc = ["normal","i","ia","ib","ii","iia","iib","iic","iii","iiia","iiib","iiic","iv","iva","ivb","x","not reported"]
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
-merged_stage_n = ["normal","i","ii","iii","iv","x"]
+merged_stage_n = ["i","ii","iii","iv","x"]
 
 tumor_stages_xaxis = {}
 for idx, item in enumerate(tumor_stages):
