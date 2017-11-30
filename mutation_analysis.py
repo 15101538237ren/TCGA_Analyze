@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 import os, json, requests
 from util import read_whole_genenames
+from expression_analysis import read_tab_seperated_file_and_get_target_column,write_tab_seperated_file_for_a_list
 cancer_names = ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
@@ -68,9 +69,8 @@ def get_maf_submitter_ids():
                             submitter_dict[cancer_name][submitter_id] = 1
                         line = snv_file.readline()
                     print "end %s" % file_path
-            with open(outfile_path,"w") as outfile:
-                outfile.write("\n".join([str(gidx+1) + "\t" + submitter_id for gidx, submitter_id in enumerate(submitter_dict[cancer_name].keys())]))
-                print "write %s successful" % outfile_path
+
+            write_tab_seperated_file_for_a_list(outfile_path, submitter_dict[cancer_name].keys(), index_included= True)
 
 #1. 读取get_maf_submitter_ids函数产生的*_submitter_ids.txt文件, 从而获得该癌症的所有submitter_id列表;
 #2. 通过query_stage_of_an_submitter_id函数, 查询query_size大小的submitter_id列表对应的癌症阶段列表(stages)
@@ -85,13 +85,7 @@ def get_submitter_id_stages():
             input_path = os.path.join(output_cancer_dir, cancer_name + "_submitter_ids.txt")
             output_path = os.path.join(output_cancer_dir, cancer_name + "_stages.txt")
             submitter_id_stage_dict = {}
-            submitter_ids = []
-            with open(input_path, "r") as input_file:
-                line = input_file.readline()
-                while line:
-                    submitter_id = line.split("\t")[1][0:-1]
-                    submitter_ids.append(submitter_id)
-                    line = input_file.readline()
+            submitter_ids = read_tab_seperated_file_and_get_target_column(1, input_path)
             print cancer_name
             len_submitters = len(submitter_ids)
             print len_submitters
@@ -147,8 +141,7 @@ def dna_mutation_data_transform_pipline():
         os.makedirs(outdir)
     gene_idx_path = os.path.join(outdir, "gene_idx.txt")
     if not os.path.exists(gene_idx_path):
-        with open(gene_idx_path,"w") as gene_idx_file:
-            gene_idx_file.write("\n".join([str(gidx+1) + "\t" + gene for gidx, gene in enumerate(TSG)]))
+        write_tab_seperated_file_for_a_list(gene_idx_path, TSG, index_included=True)
 
     colum_idxs = [0, 8, 15] #要提取maf文件的列编号
     mutation_expections = ["Missense_Mutation", "Translation_Start_Site", "Splice_Region", "Splice_Site", "In_Frame_Del", "In_Frame_Ins", "Frame_Shift_Del", "Frame_Shift_Ins"]
