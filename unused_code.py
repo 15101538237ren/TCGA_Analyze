@@ -299,6 +299,9 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile():
         #     os.makedirs(out_dir)
         # dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
 
+
+
+
 if __name__ == '__main__':
     dna_dir = data_dir + os.sep + "GRCh38"
     file_pre = "Homo_sapiens.GRCh38.dna.chromosome."
