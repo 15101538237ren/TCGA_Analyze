@@ -407,68 +407,70 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
             outfile.close()
     print "%s dump_data_into_tsv_according_to_cancer_type_and_stage" % cancer_name
 
-def query_stage_of_an_submitter_id(submitter_id):
+def query_stage_of_an_submitter_id(submitter_ids, query_size):
     cases_endpt = 'https://api.gdc.cancer.gov/cases'
-    filt = {"op":"and","content":[{"op":"in","content":{"field":"submitter_id","value":[submitter_id]}}]}
-    params = {'filters':json.dumps(filt), 'fields':'diagnoses.tumor_stage'}
+    filt = {"op":"and","content":[{"op":"in","content":{"field":"submitter_id","value":submitter_ids}}]}
+    params = {'filters':json.dumps(filt), 'expand':'diagnoses','fields':['diagnoses.submitter_id','diagnoses.tumor_stage'],'pretty':True,'size':query_size}
     # requests URL-encodes automatically
     response = requests.get(cases_endpt, params = params)
     ret_obj = response.json()
-    stage = "not reported"
-    if "hits" in ret_obj["data"].keys() and  "diagnoses" in ret_obj["data"]["hits"][0].keys() and len(ret_obj["data"]["hits"][0]["diagnoses"]):
-        stage = ret_obj["data"]["hits"][0]["diagnoses"][0]["tumor_stage"].split(" ")[1]
-    print "query %s finished %s " % (submitter_id, stage)
-    return stage
-def dna_mutation_data_transform_pipline(load = False):
+    # ret_obj = json.dumps(response.json(), indent=2)
+    # print ret_obj
+
+    # print json.dumps(ret_obj["data"]["hits"],indent=2)
+    submitter_id_to_stage = {}
+    for tidx in range(len(submitter_ids)):
+        try:
+            if "hits" in ret_obj["data"].keys() and  "diagnoses" in ret_obj["data"]["hits"][tidx].keys() and len(ret_obj["data"]["hits"][tidx]["diagnoses"]):
+                stage_name = ret_obj["data"]["hits"][tidx]["diagnoses"][0]["tumor_stage"]
+                submitter_id = ret_obj["data"]["hits"][tidx]["diagnoses"][0]["submitter_id"]
+                stage = stage_name if stage_name == "not reported" else stage_name.split(" ")[1]
+                submitter_id_rev = submitter_id.split("_")[0]
+                submitter_id_to_stage[submitter_id_rev] = stage
+        except IndexError,e:
+            print e
+    print submitter_id_to_stage
+    return [submitter_id_to_stage]
+def dna_mutation_data_transform_pipline():
     outdir ="snv_dat"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    data_pkl_path = os.path.join(outdir, "data.pkl")
-    if not load:
-        #create gene_index_file
-        with open(os.path.join(outdir, "gene_idx.txt"),"w") as gene_idx_file:
-            gene_idx_file.write("\n".join([str(gidx+1) + "\t" + gene for gidx, gene in enumerate(TSG)]))
+    #create gene_index_file
+    with open(os.path.join(outdir, "gene_idx.txt"),"w") as gene_idx_file:
+        gene_idx_file.write("\n".join([str(gidx+1) + "\t" + gene for gidx, gene in enumerate(TSG)]))
 
-        colum_idxs = [0, 8, 15, 32] #要提取maf文件的列编号
-        data_pkl_dict = {}
-        for cancer_name in cancer_names:
-            cancer_dir = os.path.join(snv_base_dir, cancer_name)
-            if os.path.exists(cancer_dir):
-                data_dict = {stage:{} for stage in merged_stage}
-                uuid_to_stage_dict = {}
-                file_names = os.listdir(cancer_dir)
-                for file_name in file_names:
-                    if not file_name.startswith("."):
-                        file_path = os.path.join(cancer_dir,file_name)
-                        snv_file = open(file_path, "r")
-                        print "%s start %s" % (cancer_name, file_path)
-                        # pass head 6 lines
-                        for i in range(6):
-                            snv_file.readline()
+    colum_idxs = [0, 8, 15, 32] #要提取maf文件的列编号
+    data_pkl_dict = {}
+    for cancer_name in cancer_names:
+        cancer_dir = os.path.join(snv_base_dir, cancer_name)
+        if os.path.exists(cancer_dir):
+            data_dict = {stage:{} for stage in merged_stage}
+            uuid_to_stage_dict = {}
+            file_names = os.listdir(cancer_dir)
+            for file_name in file_names:
+                if not file_name.startswith("."):
+                    file_path = os.path.join(cancer_dir,file_name)
+                    snv_file = open(file_path, "r")
+                    print "%s start %s" % (cancer_name, file_path)
+                    # pass head 6 lines
+                    for i in range(6):
+                        snv_file.readline()
+                    line = snv_file.readline()
+                    while line:
+                        line_contents = line.split("\t")
+                        [gene_name, variation_classification, bar_code, uuid] = [line_contents[i] for i in colum_idxs]
+                        submitter_id = "-".join(bar_code.split("-")[0:3])
+
+                        if submitter_id not in uuid_to_stage_dict.keys():
+                            uuid_to_stage_dict[submitter_id] = query_stage_of_an_submitter_id(submitter_id)
+                        stage = tumor_stage_convert[uuid_to_stage_dict[submitter_id]]
+                        if gene_name in TSG and variation_classification == "Missense_Mutation":
+                            if submitter_id not in data_dict[stage].keys():
+                                data_dict[stage][submitter_id] = {gene : 0 for gene in TSG}
+                            data_dict[stage][submitter_id][gene_name] += 1
                         line = snv_file.readline()
-                        while line:
-                            line_contents = line.split("\t")
-                            [gene_name, variation_classification, bar_code, uuid] = [line_contents[i] for i in colum_idxs]
-                            submitter_id = "-".join(bar_code.split("-")[0:3])
-
-                            if submitter_id not in uuid_to_stage_dict.keys():
-                                uuid_to_stage_dict[submitter_id] = query_stage_of_an_submitter_id(submitter_id)
-                            stage = tumor_stage_convert[uuid_to_stage_dict[submitter_id]]
-                            if gene_name in TSG and variation_classification == "Missense_Mutation":
-                                if submitter_id not in data_dict[stage].keys():
-                                    data_dict[stage][submitter_id] = {gene : 0 for gene in TSG}
-                                data_dict[stage][submitter_id][gene_name] += 1
-                            line = snv_file.readline()
-                        print "end %s" % file_path
-                data_pkl_dict[cancer_name]=[data_dict, uuid_to_stage_dict]
-        pickle_file = open(data_pkl_path, 'wb')
-        pickle.dump(data_pkl_dict,pickle_file,-1)
-        pickle_file.close()
-    else:
-        pickle_file = open(data_pkl_path,"rb")
-        [data_dict, uuid_to_stage_dict] = pickle.load(pickle_file)
-        pickle_file.close()
-        print "load pickle file %s finished" % (data_pkl_path)
+                    print "end %s" % file_path
+            data_pkl_dict[cancer_name]=[data_dict, uuid_to_stage_dict]
     for cancer_name in cancer_names:
         cancer_dir = os.path.join(snv_base_dir, cancer_name)
         if os.path.exists(cancer_dir):
@@ -486,7 +488,68 @@ def dna_mutation_data_transform_pipline(load = False):
                         arr.extend([data_dict[cancer_stage][submitter_id][gene] for submitter_id in submitter_ids])
                         data_str.append("\t".join([str(item) for item in arr]))
                     data_file.write("\n".join(data_str))
+def get_maf_submitter_ids():
+    submitter_dict = {}
+    outdir ="snv_dat"
+    for cancer_name in cancer_names:
+        cancer_dir = os.path.join(snv_base_dir, cancer_name)
+        if os.path.exists(cancer_dir):
+            outfile_path = os.path.join(outdir, "Mut_"+cancer_name+"_submitter_ids.txt")
+            submitter_dict[cancer_name] = {}
+            file_names = os.listdir(cancer_dir)
+            for file_name in file_names:
+                if not file_name.startswith("."):
+                    file_path = os.path.join(cancer_dir,file_name)
+                    snv_file = open(file_path, "r")
+                    print "%s start %s" % (cancer_name, file_path)
+                    # pass head 6 lines
+                    for i in range(6):
+                        snv_file.readline()
+                    line = snv_file.readline()
+                    while line:
+                        line_contents = line.split("\t")
+                        bar_code = line_contents[15]
+                        submitter_id = "-".join(bar_code.split("-")[0:3])
+                        if submitter_id not in submitter_dict[cancer_name].keys():
+                            submitter_dict[cancer_name][submitter_id] = 1
+                        line = snv_file.readline()
+                    print "end %s" % file_path
+            with open(outfile_path,"w") as outfile:
+                outfile.write("\n".join([str(gidx+1) + "\t" + submitter_id for gidx, submitter_id in enumerate(submitter_dict[cancer_name].keys())]))
+                print "write %s successful" % outfile_path
+def get_submitter_id_stages():
+    outdir ="snv_dat"
+    query_size = 300
+    for cancer_name in cancer_names:
+        cancer_dir = os.path.join(snv_base_dir, cancer_name)
+        if os.path.exists(cancer_dir):
+            input_path = os.path.join(outdir, "Mut_"+cancer_name+"_submitter_ids.txt")
+            output_path = os.path.join(outdir, "Mut_"+cancer_name+"_submitter_ids_to_stage.txt")
+            submitter_id_stage_dict = {}
+            submitter_ids = []
+            with open(input_path, "r") as input_file:
+                line = input_file.readline()
+                while line:
+                    submitter_id = line.split("\t")[1][0:-1]
+                    submitter_ids.append(submitter_id)
+                    line = input_file.readline()
+            print cancer_name
+            len_submitters = len(submitter_ids)
+            print len_submitters
+            for i in range(0, len_submitters, query_size):
+                sub_submitter_ids = submitter_ids[i:i+query_size]
+                stages_of_subids_dict = query_stage_of_an_submitter_id(sub_submitter_ids, query_size)
+                for k,v in stages_of_subids_dict[0].items():
+                    submitter_id_stage_dict[k] = v
+            print submitter_id_stage_dict
+
+            with open(output_path,"w") as outfile:
+                for gidx, submitter_id in enumerate(submitter_ids):
+                    if submitter_id not in submitter_id_stage_dict.keys():
+                        submitter_id_stage_dict[submitter_id] = "not reported"
+                outfile.write("\n".join([str(gidx+1) + "\t" + submitter_id + "\t" + submitter_id_stage_dict[submitter_id] for gidx, submitter_id in enumerate(submitter_ids)]))
+                print "write %s successful" % input_path
 if __name__ == '__main__':
+    # get_maf_submitter_ids()
+    # get_submitter_id_stages()
     dna_mutation_data_transform_pipline(load=False)
-    # uuid = "1f601832-eee3-48fb-acf5-80c4a454f26e"
-    # query_stage_of_an_uuid(uuid)
