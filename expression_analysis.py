@@ -51,6 +51,8 @@ def write_tab_seperated_file_for_a_list(target_file_path, target_list, index_inc
     with open(target_file_path,"w") as outfile:
         if index_included:
             outfile.write("\n".join([str(gidx+1) + "\t" + str(value) for gidx, value in enumerate(target_list)]))
+        else:
+            outfile.write("\n".join([str(value) for value in target_list]))
         print "write %s successful" % target_file_path
 
 #读取tab分隔的文件(input_file_path) 的第target_col_index, 返回该列的所有值到一个list
@@ -59,12 +61,16 @@ def read_tab_seperated_file_and_get_target_column(target_col_index, input_file_p
     with open(input_file_path, "r") as input_file:
         line = input_file.readline()
         while line:
-            value = line.split("\t")[target_col_index][0:-1]
+            line_contents = line.split("\t")
+            if target_col_index== len(line_contents)-1:
+                value = line_contents[target_col_index][0:-1]
+            else:
+                value = line_contents[target_col_index]
             ret_value_list.append(value)
             line = input_file.readline()
     return ret_value_list
 
-#
+#从meta_data文件中获取所有htseq_count文件对应的癌症主分期列表,并将其输出到文件cancer_name_stages.txt中
 def obtain_stage_info_from_metadata():
     #make output_dir
     for cancer_name in cancer_names:
@@ -105,6 +111,24 @@ def obtain_stage_info_from_metadata():
             file_name_to_stage[htseq_file_name] = stage_save
             stage_list.append(stage_save)
         write_tab_seperated_file_for_a_list(output_path, stage_list, index_included=True)
+#所有htseq-count文件的第一列的Ensembl基因列表顺序和数量均相同,要注意最后5行为统计信息,不是基因名
+def generate_ensembl_gene_ids_in_a_htseq_file():
+    first_htseq_file_path = ""
+    for cancer_name in cancer_names:
+        cancer_data_dir = os.path.join(rna_data_dir, cancer_name)
+        filenames = os.listdir(cancer_data_dir)
+        flag = False
+        for filename in filenames:
+            if filename.endswith(htsep_file_end):
+                flag = True
+                first_htseq_file_path = os.path.join(cancer_data_dir, filename)
+                break
+        if flag:
+            break
+
+    ensembl_gene_ids = read_tab_seperated_file_and_get_target_column(0, first_htseq_file_path)
+    outfile_path = os.path.join(rna_out_dir, "ensembl_gene_ids.txt")
+    write_tab_seperated_file_for_a_list(outfile_path, ensembl_gene_ids[0:-5], index_included=False)
 if __name__ == '__main__':
     #obtain_htseq_count_filelist()
-    obtain_stage_info_from_metadata()
+    # obtain_stage_info_from_metadata()
