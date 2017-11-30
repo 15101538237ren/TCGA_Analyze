@@ -494,7 +494,10 @@ def get_maf_submitter_ids():
     for cancer_name in cancer_names:
         cancer_dir = os.path.join(snv_base_dir, cancer_name)
         if os.path.exists(cancer_dir):
-            outfile_path = os.path.join(outdir, "Mut_"+cancer_name+"_submitter_ids.txt")
+            output_cancer_dir = os.path.join(outdir, cancer_name)
+            if not os.path.exists(output_cancer_dir):
+                os.makedirs(output_cancer_dir)
+            outfile_path = os.path.join(output_cancer_dir, cancer_name + "_submitter_ids.txt")
             submitter_dict[cancer_name] = {}
             file_names = os.listdir(cancer_dir)
             for file_name in file_names:
@@ -523,8 +526,9 @@ def get_submitter_id_stages():
     for cancer_name in cancer_names:
         cancer_dir = os.path.join(snv_base_dir, cancer_name)
         if os.path.exists(cancer_dir):
-            input_path = os.path.join(outdir, "Mut_"+cancer_name+"_submitter_ids.txt")
-            output_path = os.path.join(outdir, "Mut_"+cancer_name+"_submitter_ids_to_stage.txt")
+            output_cancer_dir = os.path.join(outdir, cancer_name)
+            input_path = os.path.join(output_cancer_dir, cancer_name + "_submitter_ids.txt")
+            output_path = os.path.join(output_cancer_dir, cancer_name + "_stages.txt")
             submitter_id_stage_dict = {}
             submitter_ids = []
             with open(input_path, "r") as input_file:
@@ -547,9 +551,9 @@ def get_submitter_id_stages():
                 for gidx, submitter_id in enumerate(submitter_ids):
                     if submitter_id not in submitter_id_stage_dict.keys():
                         submitter_id_stage_dict[submitter_id] = "not reported"
-                outfile.write("\n".join([str(gidx+1) + "\t" + submitter_id + "\t" + submitter_id_stage_dict[submitter_id] for gidx, submitter_id in enumerate(submitter_ids)]))
+                outfile.write("\n".join([str(gidx+1)  + "\t" + submitter_id_stage_dict[submitter_id] for gidx, submitter_id in enumerate(submitter_ids)])) #+ "\t" + submitter_id
                 print "write %s successful" % input_path
 if __name__ == '__main__':
-    # get_maf_submitter_ids()
-    # get_submitter_id_stages()
-    dna_mutation_data_transform_pipline(load=False)
+    get_maf_submitter_ids()
+    get_submitter_id_stages()
+    # dna_mutation_data_transform_pipline()
