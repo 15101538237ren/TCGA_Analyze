@@ -210,11 +210,13 @@ if not os.path.exists(correspondent_index_path):
 
 def generate_tpm_table_for_each_cancer_and_each_stage():
     correspondent_indexs = [int(value) for value in read_tab_seperated_file_and_get_target_column(1 , correspondent_index_path)]
+    gene_idxs = np.array([ item for item in range(len(correspondent_indexs) + 1)])
     for cancer_name in cancer_names:
         cancer_data_dir = os.path.join(rna_data_dir, cancer_name)
         output_cancer_dir = os.path.join(rna_out_dir, cancer_name)
         htseq_filelist_path = os.path.join(output_cancer_dir, cancer_name + "_htseq_filelist.txt")
         stages_path = os.path.join(output_cancer_dir, cancer_name + "_stages.txt")
+
         htseq_filenames = read_tab_seperated_file_and_get_target_column(1, htseq_filelist_path)
         htseq_case_ids = [htseq_filename[0 : -13] for htseq_filename in htseq_filenames]
         stages = read_tab_seperated_file_and_get_target_column(1, stages_path)
@@ -223,19 +225,27 @@ def generate_tpm_table_for_each_cancer_and_each_stage():
             stage = stages[hidx]
             stage_to_its_htseq[stage].append(htseq_case_id)
         for stage in merged_stage_n:
+            out_stage_tpm_data_path = os.path.join(output_cancer_dir, cancer_name + "_" + stage + "_tpm.dat")
+
             htseq_case_id_list = stage_to_its_htseq[stage]
             write_tab_seperated_file_for_a_list(os.path.join(output_cancer_dir, stage + "_case_ids.txt"), htseq_case_id_list, index_included=True)
 
             print "%s, %s, %d" %(cancer_name, stage, len(htseq_case_id_list))
-            for htseq_case_id in htseq_case_id_list:
+            tpm_matrix = [gene_idxs]
+            for hidx ,htseq_case_id in enumerate(htseq_case_id_list):
                 fpkm_filepath = os.path.join(cancer_data_dir, htseq_case_id + ".FPKM.txt")
                 tpm_values = compute_tpm_for_a_htseq_count_file(fpkm_filepath)
-                filtered_tpm_values = []
+                filtered_tpm_values = [hidx]
                 for correspondent_index in correspondent_indexs:
                   if correspondent_index < 0:
                       filtered_tpm_values.append(-1)
                   else:
                       filtered_tpm_values.append(tpm_values[correspondent_index - 1])
+                tpm_matrix.append(np.array(filtered_tpm_values))
+                print "tpm finished %s" % htseq_case_id
+            tpm_matrix = np.array(tpm_matrix).transpose()
+            np.savetxt(out_stage_tpm_data_path, tpm_matrix, delimiter="\t")
+            print "save %s stage tpm data successful!" % stage
 if __name__ == '__main__':
     generate_tpm_table_for_each_cancer_and_each_stage()
 
