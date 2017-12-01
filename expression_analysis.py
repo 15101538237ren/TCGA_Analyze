@@ -1,7 +1,6 @@
 # -*- coding:utf-8 -*-
 import os, json
 import numpy as np
-from util import read_whole_genenames
 cancer_names = ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]
 
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
@@ -14,6 +13,26 @@ run_needed = "run_needed"
 metadata_dir = os.path.join(rna_base_dir, "metadata")
 rna_data_dir =  os.path.join(rna_base_dir, "rna_expression")
 htsep_file_end = ".htseq.counts"
+def read_whole_genenames(file_path):
+    genes = []
+    alias_dict = {}
+    now_file = open(file_path,'r')
+    lines = now_file.readline().split("\r")
+    for line in lines:
+        contents = line.split("\t")
+        gene_name = contents[0]
+        alias_dict[gene_name] = gene_name
+        alias = contents[1].split("|")
+        previous_symbols = contents[2].split("|")
+        if len(alias) and alias[0] != "":
+            for alias_name in alias:
+                alias_dict[alias_name] = gene_name
+        if len(previous_symbols) and previous_symbols[0]!="":
+            for previous_symbol in previous_symbols:
+                alias_dict[previous_symbol] = gene_name
+        genes.append(gene_name)
+    now_file.close()
+    return [genes, alias_dict]
 
 tumor_suppressed_gene_file = os.path.join(run_needed, "gene_with_protein_product.tsv")
 [TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_file)
@@ -235,14 +254,14 @@ def generate_tpm_table_for_each_cancer_and_each_stage():
             for hidx ,htseq_case_id in enumerate(htseq_case_id_list):
                 fpkm_filepath = os.path.join(cancer_data_dir, htseq_case_id + ".FPKM.txt")
                 tpm_values = compute_tpm_for_a_htseq_count_file(fpkm_filepath)
-                filtered_tpm_values = [hidx]
+                filtered_tpm_values = [hidx + 1]
                 for correspondent_index in correspondent_indexs:
                   if correspondent_index < 0:
                       filtered_tpm_values.append(-1)
                   else:
                       filtered_tpm_values.append(tpm_values[correspondent_index - 1])
                 tpm_matrix.append(np.array(filtered_tpm_values))
-                print "tpm finished %s" % htseq_case_id
+                print "%s\t%s\ttpm %d / %d" % ( cancer_name, stage, hidx + 1, len(htseq_case_id_list))
             tpm_matrix = np.array(tpm_matrix).transpose()
             np.savetxt(out_stage_tpm_data_path, tpm_matrix, delimiter="\t")
             print "save %s stage tpm data successful!" % stage

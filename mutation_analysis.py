@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 import os, json, requests
-from util import read_whole_genenames
+from methylation_analysis import read_whole_genenames
 from expression_analysis import read_tab_seperated_file_and_get_target_column,write_tab_seperated_file_for_a_list
 cancer_names = ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}

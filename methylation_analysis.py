@@ -2,16 +2,17 @@
 import os, math, re, json, time, pickle, random
 import numpy as np
 import matplotlib.pyplot as plt
+from expression_analysis import write_tab_seperated_file_for_a_list
 
 #preparation files
 data_dir = "data"
 pickle_dir = "pkl"
 fig_dir = "figure"
 methy_data_dir = "methy_data"
-tsv_dir = "tsv_data"
+methy_out_dir = "methy_dat"
 mean_and_var_fig_dir = "mean_and_std_figure"
 run_needed = "run_needed"
-dirs = [data_dir, pickle_dir, fig_dir, tsv_dir, methy_data_dir, mean_and_var_fig_dir, run_needed]
+dirs = [data_dir, pickle_dir, fig_dir, methy_out_dir, methy_data_dir, mean_and_var_fig_dir, run_needed]
 for dir_name in dirs:
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
@@ -358,27 +359,48 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
     [profile, profile_uuid] = profile_list
 
     for stage_idx, stage_name in enumerate(merged_stage):
+        output_cancer_dir = outdir
         if stage_name != "not reported" and len(profile_uuid[stage_name]):
-            outfile_path = outdir + os.sep + cancer_name + "_" + stage_name + ".tsv"
+            out_uuid_id_path = os.path.join(output_cancer_dir, cancer_name + "_" + stage_name + "_uuids.txt")
+            write_tab_seperated_file_for_a_list(out_uuid_id_path, profile_uuid[stage_name],index_included=True)
+
+            outfile_path =  os.path.join(output_cancer_dir, cancer_name + "_" + stage_name + "_methy_dat.dat")
             outfile = open(outfile_path, "w")
-            header = "gene\t" + "\t".join(profile_uuid[stage_name]) + "\n"
-            outfile.write(header)
-            for gene in TSG:
+            out_str = []
+            header = "\t".join([ str(item) for item in range(len(profile_uuid[stage_name]) + 1)])
+            out_str.append(header)
+            for gidx, gene in enumerate(TSG):
                 if gene in profile.keys():
-                    gene_valid = True
-                    methy_vals = []
-                    for item in profile[gene][stage_idx]:
-                        item_str = str(round(item,4))
+                    methy_vals = [-1 for it in range(len(profile[gene][stage_idx]))]
+                    for pidx, item in enumerate(profile[gene][stage_idx]):
+                        item_val = round(item, 4)
+                        item_str = str(item_val)
                         if item_str == "nan":
-                            gene_valid = False
                             break
                         else:
-                            methy_vals.append(item_str)
-                    if gene_valid:
-                        data_str = gene + "\t" + "\t".join(methy_vals) + "\n"
-                        outfile.write(data_str)
+                            methy_vals[pidx] = item_val
+                    data_str = str(gidx + 1) + "\t" + "\t".join([str(item) for item in methy_vals])
+                    out_str.append(data_str)
+            outfile.write("\n".join(out_str))
             outfile.close()
     print "%s dump_data_into_tsv_according_to_cancer_type_and_stage" % cancer_name
+def dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile():
+    for cancer_name in cancer_names:
+        print "now start %s" % cancer_name
+        data_path = data_dir + os.sep+ cancer_name + os.sep
+        pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+        temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+        new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+        out_dir = methy_out_dir + os.sep + cancer_name
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
+
+#some global variables
+gene_idx_path = os.path.join(methy_out_dir, "gene_idx.txt")
+if not os.path.exists(gene_idx_path):
+    with open(gene_idx_path,"w") as gene_idx_file:
+        gene_idx_file.write("\n".join([str(gidx+1) + "\t" + gene for gidx, gene in enumerate(TSG)]))
 
 if __name__ == '__main__':
-    pass
+    dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile()
