@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 import os, json
 import numpy as np
-cancer_names = ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]
+cancer_names = ["COAD"]#"BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"
 
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
@@ -10,9 +10,13 @@ merged_stage_n = ["i","ii","iii","iv","x"]
 rna_base_dir = "rna"
 rna_out_dir = "rna_dat"
 run_needed = "run_needed"
+
 metadata_dir = os.path.join(rna_base_dir, "metadata")
 rna_data_dir =  os.path.join(rna_base_dir, "rna_expression")
 htsep_file_end = ".htseq.counts"
+
+tumor_suppressed_gene_filepath = run_needed + os.sep + "gene_with_protein_product.tsv"
+
 def read_whole_genenames(file_path):
     genes = []
     alias_dict = {}
@@ -21,21 +25,34 @@ def read_whole_genenames(file_path):
     for line in lines:
         contents = line.split("\t")
         gene_name = contents[0]
-        alias_dict[gene_name] = gene_name
-        alias = contents[1].split("|")
-        previous_symbols = contents[2].split("|")
-        if len(alias) and alias[0] != "":
-            for alias_name in alias:
-                alias_dict[alias_name] = gene_name
-        if len(previous_symbols) and previous_symbols[0]!="":
-            for previous_symbol in previous_symbols:
-                alias_dict[previous_symbol] = gene_name
+        if len(contents) > 1:
+            alias_dict[gene_name] = gene_name
+            alias = contents[1].split("|")
+            if len(alias) and alias[0] != "":
+                for alias_name in alias:
+                    alias_dict[alias_name] = gene_name
+        if len(contents) > 2:
+            previous_symbols = contents[2].split("|")
+            if len(previous_symbols) and previous_symbols[0]!="":
+                for previous_symbol in previous_symbols:
+                    alias_dict[previous_symbol] = gene_name
         genes.append(gene_name)
     now_file.close()
     return [genes, alias_dict]
 
-tumor_suppressed_gene_file = os.path.join(run_needed, "gene_with_protein_product.tsv")
-[TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_file)
+# 读取tab分隔的文件(input_file_path) 的第target_col_index, 返回该列的所有值到一个list
+def read_tab_seperated_file_and_get_target_column(target_col_index, input_file_path, sep="\t",line_end = "\n"):
+    ret_value_list = []
+    with open(input_file_path, "r") as input_file:
+        line = input_file.readline()
+        while line:
+            line_contents = line.split(sep)
+            led = line_contents[target_col_index].strip(line_end)
+            ret_value_list.append(led)
+            line = input_file.readline()
+    return ret_value_list
+
+[TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_filepath)
 
 # 获得每种癌症的htseq-count数据的文件名列表
 def obtain_htseq_count_filelist():
@@ -61,28 +78,13 @@ def obtain_htseq_count_filelist():
     return [filename_dict]
 
 # 向target_file_path中写target_list的值, 如果index_included=True,则第一列为自增索引, 第二列为value
-def write_tab_seperated_file_for_a_list(target_file_path, target_list, index_included=True):
-    with open(target_file_path,"w") as outfile:
+def write_tab_seperated_file_for_a_list(target_file_path, target_list, index_included=True, sep="\t",line_end = "\n"):
+    with open(target_file_path, "w") as outfile:
         if index_included:
-            outfile.write("\n".join([str(gidx+1) + "\t" + str(value) for gidx, value in enumerate(target_list)]))
+            outfile.write(line_end.join([str(gidx+1) + sep + str(value) for gidx, value in enumerate(target_list)]))
         else:
-            outfile.write("\n".join([str(value) for value in target_list]))
+            outfile.write(line_end.join([str(value) for value in target_list]))
         print "write %s successful" % target_file_path
-
-# 读取tab分隔的文件(input_file_path) 的第target_col_index, 返回该列的所有值到一个list
-def read_tab_seperated_file_and_get_target_column(target_col_index, input_file_path):
-    ret_value_list = []
-    with open(input_file_path, "r") as input_file:
-        line = input_file.readline()
-        while line:
-            line_contents = line.split("\t")
-            if line_contents[target_col_index].endswith("\n"):
-                value = line_contents[target_col_index][0:-1]
-            else:
-                value = line_contents[target_col_index]
-            ret_value_list.append(value)
-            line = input_file.readline()
-    return ret_value_list
 
 # 从meta_data文件中获取所有htseq_count文件对应的癌症主分期列表,并将其输出到文件cancer_name_stages.txt中
 def obtain_stage_info_from_metadata():
@@ -206,9 +208,9 @@ def connect_whole_genome_to_ensembl_gene_symbol_index(whole_gene_idx_filepath , 
 #计算一个fpkm文件中每个基因的tpm值
 def compute_tpm_for_a_htseq_count_file(fpkm_file_path):
     fpkm_values = [float(value) for value in read_tab_seperated_file_and_get_target_column(1, fpkm_file_path)]
-    sum_of_fpkm = float(np.array(fpkm_values).sum())
-    tpm_values = [(fpkm_value / sum_of_fpkm) * 1000000.0 for fpkm_value in fpkm_values]
-    return tpm_values
+    # sum_of_fpkm = float(np.array(fpkm_values).sum())
+    # tpm_values = [(fpkm_value / sum_of_fpkm) * 1000000.0 for fpkm_value in fpkm_values]
+    return fpkm_values#tpm_values
 
 #some global variables
 gene_idx_path = os.path.join(rna_out_dir, "gene_idx.txt")
@@ -243,7 +245,7 @@ def generate_tpm_table_for_each_cancer_and_each_stage():
         for hidx, htseq_case_id in enumerate(htseq_case_ids):
             stage = stages[hidx]
             stage_to_its_htseq[stage].append(htseq_case_id)
-        for stage in merged_stage_n:
+        for stage in merged_stage:
             out_stage_tpm_data_path = os.path.join(output_cancer_dir, cancer_name + "_" + stage + "_tpm.dat")
 
             htseq_case_id_list = stage_to_its_htseq[stage]

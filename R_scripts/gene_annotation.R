@@ -1,0 +1,6 @@
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+gene_dataframe_orgDb <- AnnotationDbi::select(org.Hs.eg.db, keys=ENTREZID_org, columns=c("ENSEMBL", "SYMBOL"), keytype="ENTREZID")
+colnames(gene_dataframe_orgDb) <- c("Entrez", "Ensembl", "HGNC")
+colnames(gene_dataframe_orgDb) <- paste(colnames(gene_dataframe_orgDb), "orgDb", sep = "_")

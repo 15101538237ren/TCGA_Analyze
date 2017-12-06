@@ -2,24 +2,23 @@
 import os, math, re, json, time, pickle, random
 import numpy as np
 import matplotlib.pyplot as plt
-from expression_analysis import write_tab_seperated_file_for_a_list
+from expression_analysis import write_tab_seperated_file_for_a_list, TSG, alias_dict, read_whole_genenames
 
 #preparation files
-data_dir = "data"
+data_dir = "dna_methy_data"
 pickle_dir = "pkl"
 fig_dir = "figure"
 methy_data_dir = "methy_data"
 methy_out_dir = "methy_dat"
-mean_and_var_fig_dir = "mean_and_std_figure"
 run_needed = "run_needed"
-dirs = [data_dir, pickle_dir, fig_dir, methy_out_dir, methy_data_dir, mean_and_var_fig_dir, run_needed]
+dirs = [pickle_dir, methy_out_dir]
 for dir_name in dirs:
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
 manifest_path = run_needed + os.sep + "24_cancer_manifest.tsv"
 json_file_path = run_needed + os.sep + "24_cancer_meta.json"
-tumor_suppressed_gene_file = run_needed + os.sep + "gene_with_protein_product.tsv"
+tumor_suppressed_gene_filepath = run_needed + os.sep + "gene_with_protein_product.tsv"
 
 cancer_names = ["BRCA", "COAD", "LIHC", "LUAD", "LUSC","BLCA" ,"ESCA","HNSC" ,"KIRC", "KIRP", "PAAD", "READ", "THCA", "STAD","LGG","OV","GBM","LAML", "PRAD","UCEC","SARC", "UVM","CESC", "DLBC"] #,
 
@@ -47,30 +46,6 @@ def read_genenames(file_path):
         line = now_file.readline()
     now_file.close()
     return [genes, []]
-
-def read_whole_genenames(file_path):
-    genes = []
-    alias_dict = {}
-    now_file = open(file_path,'r')
-    lines = now_file.readline().split("\r")
-    for line in lines:
-        contents = line.split("\t")
-        gene_name = contents[0]
-        alias_dict[gene_name] = gene_name
-        alias = contents[1].split("|")
-        previous_symbols = contents[2].split("|")
-        if len(alias) and alias[0] != "":
-            for alias_name in alias:
-                alias_dict[alias_name] = gene_name
-        if len(previous_symbols) and previous_symbols[0]!="":
-            for previous_symbol in previous_symbols:
-                alias_dict[previous_symbol] = gene_name
-        genes.append(gene_name)
-    now_file.close()
-    return [genes, alias_dict]
-
-[TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_file)
-print "genome gene counts %d" % len(TSG)
 
 
 # 通过manifest文件中的对应关系,将下载的文件名filename和uuid对应起来,方便互相查询(uuid->filename, filename->uuid)
@@ -198,7 +173,7 @@ def gene_and_cancer_stage_profile_of_dna_methy(cancer_name, data_path, pickle_fi
                     beta_val = -1.0 if line_contents[1] == "NA" else float(line_contents[1])
                     gene_types = line_contents[6].split(";")
                     for idx, gene_symbol in enumerate(gene_symbols):
-                        if gene_symbol != "." and (-1500 <= int(positions_to_tss[idx]) <= 1000) and beta_val > 0.0:
+                        if gene_symbol != "." and (-2000 <= int(positions_to_tss[idx]) <= 0) and beta_val > 0.0:
                             if not whole_genes:
                                 if (gene_symbol in TSG):
                                     temp_gene_methy_dict[gene_symbol].append(beta_val)
@@ -316,7 +291,7 @@ def save_data_to_file(arr, path, precision = 4):
     file_out.close()
 
 #保存cancer_name癌症,out_stage_list中阶段的DNA甲基化数据
-def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_xy=False, out_all_stage=False):
+def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_stage_data = False,out_xy=False, out_all_stage=False):
     if not os.path.exists(methy_data_dir):
         os.makedirs(methy_data_dir)
     profile = profile_list[0]
@@ -340,7 +315,8 @@ def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_xy=False
                             ltws_y.append(ltw2)
                     stage_data = gene_data[idx]
                     merged_data.extend(stage_data)
-                    save_data_to_file(stage_data, methy_data_dir + os.sep + gene + "_" + merged_stage[idx] + "_" + cancer_name + ".dat")
+                    if out_stage_data:
+                        save_data_to_file(stage_data, methy_data_dir + os.sep + gene + "_" + merged_stage[idx] + "_" + cancer_name + ".dat")
             if out_xy:
                 out_xy_path = methy_data_dir + os.sep + gene + "_xy_" + cancer_name + ".dat"
                 out_y_label_path = methy_data_dir + os.sep + gene + "_y_label_" + cancer_name + ".dat"
@@ -355,15 +331,14 @@ def save_gene_methy_data(cancer_name, profile_list, out_stage_list, out_xy=False
     print "save methy data successfully!"
 
 #将某癌症数据写入到tsv文件中
-def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list, outdir, profile_list):
+def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list, outdir, profile_list, is_merge_stage=True):
     [profile, profile_uuid] = profile_list
-
-    for stage_idx, stage_name in enumerate(merged_stage):
+    stage_list = merged_stage if is_merge_stage else tumor_stages
+    for stage_idx, stage_name in enumerate(stage_list):
         output_cancer_dir = outdir
-        if stage_name != "not reported" and len(profile_uuid[stage_name]):
+        if stage_name != "not reported" and stage_name in profile_uuid.keys() and len(profile_uuid[stage_name]):
             out_uuid_id_path = os.path.join(output_cancer_dir, cancer_name + "_" + stage_name + "_uuids.txt")
             write_tab_seperated_file_for_a_list(out_uuid_id_path, profile_uuid[stage_name],index_included=True)
-
             outfile_path =  os.path.join(output_cancer_dir, cancer_name + "_" + stage_name + "_methy_dat.dat")
             outfile = open(outfile_path, "w")
             out_str = []
@@ -384,17 +359,54 @@ def dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_list
             outfile.write("\n".join(out_str))
             outfile.close()
     print "%s dump_data_into_tsv_according_to_cancer_type_and_stage" % cancer_name
-def dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile():
+def print_samplesize_of_each_cancer():
+    gene_name = "APC"
     for cancer_name in cancer_names:
-        print "now start %s" % cancer_name
+        # print "now start %s" % cancer_name
         data_path = data_dir + os.sep+ cancer_name + os.sep
         pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
         temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
         new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
-        out_dir = methy_out_dir + os.sep + cancer_name
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, new_profile_list)
+        profile = new_profile_list[0]
+        merged_stage_not_report = merged_stage[0:-1]
+        arr = [cancer_name]
+        tot = 0
+        for sidx,stage in enumerate(merged_stage_not_report):
+            stage_cnt = len(profile[gene_name][sidx])
+            tot += stage_cnt
+            arr.append(str(stage_cnt))
+        arr.append(str(tot))
+        print "\t".join(arr)
+
+def just_calc_methylation_pickle_pipeline():
+    for cancer_name in cancer_names:
+        if cancer_name in ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]:
+            print "now start %s" % cancer_name
+            data_path = data_dir + os.sep+ cancer_name + os.sep
+            pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+            temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+def dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile():
+    for cancer_name in cancer_names:
+        if cancer_name in ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]:
+            print "now start %s" % cancer_name
+            data_path = data_dir + os.sep+ cancer_name + os.sep
+            pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+            temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+            out_dir = methy_out_dir + os.sep + cancer_name
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            dump_data_into_tsv_according_to_cancer_type_and_stage(cancer_name, uuid_dict[cancer_name], out_dir, temp_profile_list, is_merge_stage=False)
+
+def save_gene_methy_data_pipeline():
+    out_stage_list = ["normal","i","ii","iii","iv"]
+    for cancer_name in cancer_names:
+        if cancer_name == "COAD":
+            print "now start %s" % cancer_name
+            data_path = data_dir + os.sep+ cancer_name + os.sep
+            pickle_filepath = pickle_dir + os.sep + cancer_name + ".pkl"
+            temp_profile_list = gene_and_cancer_stage_profile_of_dna_methy(cancer_name,data_path, pickle_filepath, uuid_dict[cancer_name], load=True, whole_genes= True)
+            new_profile_list = convert_origin_profile_into_merged_profile(temp_profile_list)
+            save_gene_methy_data(cancer_name, new_profile_list, out_stage_list,out_stage_data=False, out_xy=False, out_all_stage=True)
 
 #some global variables
 gene_idx_path = os.path.join(methy_out_dir, "gene_idx.txt")
@@ -403,4 +415,4 @@ if not os.path.exists(gene_idx_path):
         gene_idx_file.write("\n".join([str(gidx+1) + "\t" + gene for gidx, gene in enumerate(TSG)]))
 
 if __name__ == '__main__':
-    dump_data_into_tsv_according_to_cancer_type_and_stage_pipepile()
+    just_calc_methylation_pickle_pipeline()

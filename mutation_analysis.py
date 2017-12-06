@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 import os, json, requests
-from methylation_analysis import read_whole_genenames
-from expression_analysis import read_tab_seperated_file_and_get_target_column,write_tab_seperated_file_for_a_list
+import numpy as np
+from expression_analysis import read_tab_seperated_file_and_get_target_column, write_tab_seperated_file_for_a_list, TSG
 cancer_names = ["BRCA", "COAD", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "THCA"]
 tumor_stage_convert = {"normal":"normal","i":"i","ia":"i","ib":"i","ii":"ii","iia":"ii","iib":"ii","iic":"ii","iii":"iii","iiia":"iii","iiib":"iii","iiic":"iii","iv":"iv","iva":"iv","ivb":"iv","ivc":"iv","x":"x","not reported":"not reported"}
 merged_stage = ["normal","i","ii","iii","iv","x","not reported"]
@@ -13,16 +13,14 @@ if not os.path.exists(snv_out_dir):
     os.makedirs(snv_out_dir)
 
 run_needed = "run_needed"
-tumor_suppressed_gene_file = run_needed + os.sep + "gene_with_protein_product.tsv"
-[TSG, alias_dict] = read_whole_genenames(tumor_suppressed_gene_file)
-
+tumor_suppressed_gene_filepath = run_needed + os.sep + "gene_with_protein_product.tsv"
 
 #输入TCGA的submitter_id列表, 和查询大小(最大300), 返回一个[dict], dict的key:value分别为submitter_id : stage_name
 def query_stage_of_an_submitter_id(submitter_ids, query_size):
     cases_endpt = 'https://api.gdc.cancer.gov/cases'
     filt = {"op":"and","content":[{"op":"in","content":{"field":"submitter_id","value":submitter_ids}}]}
     params = {'filters':json.dumps(filt), 'expand':'diagnoses','fields':['diagnoses.submitter_id','diagnoses.tumor_stage'],'pretty':True,'size':query_size}
-    # requests URL-encodes automatically
+    # requests URL-encodes automaticallya
     response = requests.get(cases_endpt, params = params)
     ret_obj = response.json()
     # ret_obj = json.dumps(response.json(), indent=2)
@@ -192,23 +190,70 @@ def dna_mutation_data_transform_pipline():
                             data_str.append("\t".join([str(item) for item in arr]))
                         data_file.write("\n".join(data_str))
 
+
+def calc_mutation_rate():
+    cancer_stage = "i"
+    for cancer_name in cancer_names:
+        output_cancer_dir = os.path.join(snv_out_dir, cancer_name)
+        mutation_data_filepath = os.path.join(output_cancer_dir, cancer_name + "_" + cancer_stage + "_mutation_data.dat")
+        out_mutation_rate_filepath = os.path.join(output_cancer_dir, cancer_name + "_" + cancer_stage + "_mutation_rate.txt")
+        out_mutation_rate_sorted_filepath = os.path.join(output_cancer_dir, cancer_name + "_" + cancer_stage + "_mutation_rate_sorted.txt")
+        ltws = []
+        mut_dict = {}
+        with open(mutation_data_filepath,"r") as data_file:
+            data_file.readline()
+            line = data_file.readline()
+            while line:
+                line_contents = line.split("\t")
+                gene_name = TSG[int(str(line_contents[0])) - 1]
+                line_data = np.sign([int(item.strip("\n")) for item in line_contents[1: -1]])
+                sum_d = line_data.sum()
+                size_d = line_data.size
+                line_mutation_rate = float(sum_d)/ float(size_d)
+                ltw = "\t".join([gene_name, str(round(line_mutation_rate, 4))])
+                mut_dict[gene_name] = line_mutation_rate
+                ltws.append(ltw)
+                line = data_file.readline()
+        with open(out_mutation_rate_filepath,"w") as mutation_rate_file:
+            mutation_rate_file.write("\n".join(ltws))
+        sorted_dict = sorted(mut_dict.items(), key=lambda d: d[1],reverse=True)
+        ltws = []
+        with open(out_mutation_rate_sorted_filepath,"w") as mutation_rate_sorted_file:
+            for (k, v) in sorted_dict:
+                ltws.append("\t".join([k,str(v)]))
+            mutation_rate_sorted_file.write("\n".join(ltws))
+        print "finish %s" % cancer_name
+
+def judge_gene_in_CGI(gene_idx_filepath, CGI_genenames_filepath, output_filepath):
+    gene_names = read_tab_seperated_file_and_get_target_column(1, gene_idx_filepath)
+    gene_cgis =[0 for item in gene_names]
+    cgi_gene_names =[item.strip("\"") for item in read_tab_seperated_file_and_get_target_column(0, CGI_genenames_filepath)]
+    for gidx, gene_name in enumerate(gene_names):
+        if gene_name in cgi_gene_names:
+            gene_cgis[gidx] = 1
+    write_tab_seperated_file_for_a_list(output_filepath,gene_cgis, index_included=True, sep="\t")
 gene_idx_path = os.path.join(snv_out_dir, "gene_idx.txt")
 if not os.path.exists(gene_idx_path):
-    write_tab_seperated_file_for_a_list(gene_idx_path, TSG, index_included=True)
+    write_tab_seperated_file_for_a_list(gene_idx_path, TSG, index_included=True, sep=",", line_end="\r\n")
 
-for cancer_name in cancer_names:
-    output_cancer_dir = os.path.join(snv_out_dir, cancer_name)
-    submitter_id_input_filepath = os.path.join(output_cancer_dir, cancer_name + "_submitter_ids.txt")
-    first_called = False
-    if not os.path.exists(submitter_id_input_filepath):
-        get_maf_submitter_ids()
-        first_called = True
-    stages_input_filepath = os.path.join(output_cancer_dir, cancer_name + "_stages.txt")
-    if not os.path.exists(stages_input_filepath):
-        get_submitter_id_stages()
-        first_called = True
-    if first_called:
-        break
+# for cancer_name in cancer_names:
+#     output_cancer_dir = os.path.join(snv_out_dir, cancer_name)
+#     submitter_id_input_filepath = os.path.join(output_cancer_dir, cancer_name + "_submitter_ids.txt")
+#     first_called = False
+#     if not os.path.exists(submitter_id_input_filepath):
+#         get_maf_submitter_ids()
+#         first_called = True
+#     stages_input_filepath = os.path.join(output_cancer_dir, cancer_name + "_stages.txt")
+#     if not os.path.exists(stages_input_filepath):
+#         get_submitter_id_stages()
+#         first_called = True
+#     if first_called:
+#         break
+
 if __name__ == '__main__':
-    dna_mutation_data_transform_pipline()
+    # dna_mutation_data_transform_pipline()
+    # calc_mutation_rate()
+    # CGI_genenames_filepath = os.path.join(snv_out_dir, "gene_names_with_CGI.txt")
+    # output_filepath = os.path.join(snv_out_dir, "gene_id_with_cgi.dat")
+    # judge_gene_in_CGI(gene_idx_path, CGI_genenames_filepath, output_filepath)
     pass
